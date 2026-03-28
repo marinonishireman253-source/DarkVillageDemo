@@ -7,6 +7,9 @@ public class CameraFollow : MonoBehaviour
     [SerializeField] private float followSmoothTime = 0.16f;
     [SerializeField] private bool followOnStart = true;
     [SerializeField] private bool preserveInitialOffset = true;
+    [SerializeField] private bool lookAtTarget = true;
+    [SerializeField] private Vector3 lookAtOffset = Vector3.zero;
+    [SerializeField] private float rotationLerpSpeed = 8f;
 
     [Header("Sprint Feel")]
     [SerializeField] private PlayerMover playerMover;
@@ -17,6 +20,16 @@ public class CameraFollow : MonoBehaviour
     private bool _initialized;
     private Vector3 _baseOffset;
     private Vector3 _currentOffset;
+
+    public Transform Target => target;
+
+    public void Configure(Vector3 newOffset, bool useInitialOffset, Vector3 newLookAtOffset)
+    {
+        offset = newOffset;
+        preserveInitialOffset = useInitialOffset;
+        lookAtOffset = newLookAtOffset;
+        lookAtTarget = true;
+    }
 
     private void Start()
     {
@@ -78,6 +91,7 @@ public class CameraFollow : MonoBehaviour
 
         Vector3 desiredPosition = target.position + _currentOffset;
         transform.position = Vector3.SmoothDamp(transform.position, desiredPosition, ref _velocity, followSmoothTime);
+        UpdateRotation(Time.deltaTime);
     }
 
     public void SetTarget(Transform newTarget, bool snap = false)
@@ -116,7 +130,43 @@ public class CameraFollow : MonoBehaviour
         _baseOffset = offset;
         _currentOffset = offset;
         transform.position = target.position + _currentOffset;
+        SnapRotation();
         _velocity = Vector3.zero;
         _initialized = true;
+    }
+
+    private void UpdateRotation(float deltaTime)
+    {
+        if (!lookAtTarget)
+        {
+            return;
+        }
+
+        Quaternion desiredRotation = GetDesiredRotation();
+        float t = 1f - Mathf.Exp(-rotationLerpSpeed * deltaTime);
+        transform.rotation = Quaternion.Slerp(transform.rotation, desiredRotation, t);
+    }
+
+    private void SnapRotation()
+    {
+        if (!lookAtTarget)
+        {
+            return;
+        }
+
+        transform.rotation = GetDesiredRotation();
+    }
+
+    private Quaternion GetDesiredRotation()
+    {
+        Vector3 focusPoint = target.position + lookAtOffset;
+        Vector3 lookDirection = focusPoint - transform.position;
+
+        if (lookDirection.sqrMagnitude < 0.0001f)
+        {
+            return transform.rotation;
+        }
+
+        return Quaternion.LookRotation(lookDirection.normalized, Vector3.up);
     }
 }

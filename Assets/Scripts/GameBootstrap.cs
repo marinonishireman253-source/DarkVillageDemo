@@ -1,7 +1,12 @@
 using UnityEngine;
+using UnityEngine.Rendering.Universal;
 
 public class GameBootstrap : MonoBehaviour
 {
+    private static readonly Vector3 DefaultPlayerSpawnPosition = new Vector3(0f, 1f, 0f);
+    private static readonly Vector3 DefaultCameraOffset = new Vector3(-7.5f, 6f, -8.5f);
+    private static readonly Vector3 DefaultCameraLookOffset = new Vector3(0f, 0.5f, 0f);
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Bootstrap()
     {
@@ -17,10 +22,104 @@ public class GameBootstrap : MonoBehaviour
 
     private void Start()
     {
+        EnsureCoreWorld();
         EnsureSystems();
         EnsureUi();
         EnsureFallbackInteractables();
         EnsureQuestFlow();
+    }
+
+    private void EnsureCoreWorld()
+    {
+        EnsureGround();
+        PlayerMover player = EnsurePlayer();
+        EnsureCamera(player);
+    }
+
+    private void EnsureGround()
+    {
+        if (HasWalkableGround())
+        {
+            return;
+        }
+
+        GameObject ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
+        ground.name = "Ground";
+        ground.transform.position = Vector3.zero;
+        ground.transform.localScale = new Vector3(4f, 1f, 4f);
+    }
+
+    private PlayerMover EnsurePlayer()
+    {
+        PlayerMover existingPlayer = FindFirstObjectByType<PlayerMover>();
+        if (existingPlayer != null)
+        {
+            return existingPlayer;
+        }
+
+        GameObject player = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+        player.name = "Player";
+        player.transform.position = DefaultPlayerSpawnPosition;
+        return player.AddComponent<PlayerMover>();
+    }
+
+    private void EnsureCamera(PlayerMover player)
+    {
+        if (player == null)
+        {
+            return;
+        }
+
+        Camera mainCamera = Camera.main;
+        if (mainCamera == null)
+        {
+            mainCamera = FindFirstObjectByType<Camera>();
+        }
+
+        bool createdCamera = false;
+        if (mainCamera == null)
+        {
+            GameObject cameraObject = new GameObject("Main Camera");
+            cameraObject.tag = "MainCamera";
+            mainCamera = cameraObject.AddComponent<Camera>();
+            cameraObject.AddComponent<AudioListener>();
+            cameraObject.AddComponent<UniversalAdditionalCameraData>();
+            createdCamera = true;
+        }
+
+        GameObject cameraRoot = mainCamera.gameObject;
+        if (!cameraRoot.CompareTag("MainCamera"))
+        {
+            cameraRoot.tag = "MainCamera";
+        }
+
+        if (cameraRoot.GetComponent<AudioListener>() == null)
+        {
+            cameraRoot.AddComponent<AudioListener>();
+        }
+
+        if (cameraRoot.GetComponent<UniversalAdditionalCameraData>() == null)
+        {
+            cameraRoot.AddComponent<UniversalAdditionalCameraData>();
+        }
+
+        mainCamera.orthographic = false;
+        mainCamera.transform.position = player.transform.position + DefaultCameraOffset;
+
+        CameraFollow follow = cameraRoot.GetComponent<CameraFollow>();
+        if (follow == null)
+        {
+            follow = cameraRoot.AddComponent<CameraFollow>();
+        }
+
+        follow.Configure(DefaultCameraOffset, false, DefaultCameraLookOffset);
+
+        if (createdCamera)
+        {
+            mainCamera.fieldOfView = 60f;
+        }
+
+        follow.SetTarget(player.transform, true);
     }
 
     private void EnsureSystems()
@@ -228,6 +327,32 @@ public class GameBootstrap : MonoBehaviour
         foreach (MonoBehaviour behaviour in behaviours)
         {
             if (behaviour is IInteractable)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool HasWalkableGround()
+    {
+        Collider[] colliders = FindObjectsByType<Collider>(FindObjectsSortMode.None);
+
+        foreach (Collider collider in colliders)
+        {
+            if (collider == null || !collider.enabled || collider.isTrigger)
+            {
+                continue;
+            }
+
+            if (collider.GetComponent<PlayerMover>() != null)
+            {
+                continue;
+            }
+
+            Bounds bounds = collider.bounds;
+            if (bounds.size.x >= 8f && bounds.size.z >= 8f && bounds.center.y <= 1f)
             {
                 return true;
             }

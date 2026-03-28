@@ -10,6 +10,7 @@ public class PlayerMover : MonoBehaviour
     [SerializeField] private float acceleration = 22f;
     [SerializeField] private float deceleration = 20f;
     [SerializeField] private float turnSpeed = 14f;
+    [SerializeField] private bool moveRelativeToCamera = true;
 
     [Header("Input")]
     [SerializeField] private InputActionAsset inputActions;
@@ -52,9 +53,10 @@ public class PlayerMover : MonoBehaviour
 
     private void Update()
     {
-        UpdateFallbackInput();
+        RefreshMoveInput();
         UpdateMovement(Time.deltaTime);
         UpdateInteractionTarget();
+        ProcessActionInteraction();
         ProcessFallbackInteraction();
     }
 
@@ -92,10 +94,6 @@ public class PlayerMover : MonoBehaviour
             _moveAction.canceled += OnMoveCanceled;
         }
 
-        if (_interactAction != null)
-        {
-            _interactAction.performed += OnInteractPerformed;
-        }
     }
 
     private void UnbindInput()
@@ -104,11 +102,6 @@ public class PlayerMover : MonoBehaviour
         {
             _moveAction.performed -= OnMovePerformed;
             _moveAction.canceled -= OnMoveCanceled;
-        }
-
-        if (_interactAction != null)
-        {
-            _interactAction.performed -= OnInteractPerformed;
         }
 
         _moveAction = null;
@@ -140,16 +133,6 @@ public class PlayerMover : MonoBehaviour
         _moveInput = Vector2.zero;
     }
 
-    private void OnInteractPerformed(InputAction.CallbackContext context)
-    {
-        if (!context.performed)
-        {
-            return;
-        }
-
-        _currentInteractable?.Interact(this);
-    }
-
     private void UpdateMovement(float deltaTime)
     {
         if (SimpleDialogueUI.IsOpen)
@@ -158,8 +141,7 @@ public class PlayerMover : MonoBehaviour
             return;
         }
 
-        Vector3 desiredDirection = new Vector3(_moveInput.x, 0f, _moveInput.y);
-        desiredDirection = Vector3.ClampMagnitude(desiredDirection, 1f);
+        Vector3 desiredDirection = GetDesiredDirection();
 
         float targetSpeed = IsSprinting() ? sprintSpeed : walkSpeed;
         Vector3 targetVelocity = desiredDirection * targetSpeed;
@@ -184,6 +166,34 @@ public class PlayerMover : MonoBehaviour
         }
 
         return _usingFallbackInput && Keyboard.current != null && Keyboard.current.leftShiftKey.isPressed;
+    }
+
+    private Vector3 GetDesiredDirection()
+    {
+        Vector3 inputDirection = new Vector3(_moveInput.x, 0f, _moveInput.y);
+        if (inputDirection.sqrMagnitude <= 0.0001f)
+        {
+            return Vector3.zero;
+        }
+
+        if (!moveRelativeToCamera || Camera.main == null)
+        {
+            return Vector3.ClampMagnitude(inputDirection, 1f);
+        }
+
+        Vector3 cameraForward = Vector3.ProjectOnPlane(Camera.main.transform.forward, Vector3.up);
+        Vector3 cameraRight = Vector3.ProjectOnPlane(Camera.main.transform.right, Vector3.up);
+
+        if (cameraForward.sqrMagnitude <= 0.0001f || cameraRight.sqrMagnitude <= 0.0001f)
+        {
+            return Vector3.ClampMagnitude(inputDirection, 1f);
+        }
+
+        cameraForward.Normalize();
+        cameraRight.Normalize();
+
+        Vector3 worldDirection = cameraRight * _moveInput.x + cameraForward * _moveInput.y;
+        return Vector3.ClampMagnitude(worldDirection, 1f);
     }
 
     private void UpdateInteractionTarget()
@@ -227,29 +237,53 @@ public class PlayerMover : MonoBehaviour
         }
     }
 
-    private void UpdateFallbackInput()
+    private void RefreshMoveInput()
     {
-        if (!_usingFallbackInput || Keyboard.current == null)
+        if (_moveAction != null && _moveAction.enabled)
         {
+            _moveInput = Vector2.ClampMagnitude(_moveAction.ReadValue<Vector2>(), 1f);
             return;
         }
 
         Vector2 fallbackMove = Vector2.zero;
+        bool hasFallbackInput = false;
 
-        if (Keyboard.current.aKey.isPressed || Keyboard.current.leftArrowKey.isPressed)
-            fallbackMove.x -= 1f;
-        if (Keyboard.current.dKey.isPressed || Keyboard.current.rightArrowKey.isPressed)
-            fallbackMove.x += 1f;
-        if (Keyboard.current.sKey.isPressed || Keyboard.current.downArrowKey.isPressed)
-            fallbackMove.y -= 1f;
-        if (Keyboard.current.wKey.isPressed || Keyboard.current.upArrowKey.isPressed)
-            fallbackMove.y += 1f;
+        if (Gamepad.current != null)
+        {
+            fallbackMove = Gamepad.current.leftStick.ReadValue();
+            hasFallbackInput = fallbackMove.sqrMagnitude > 0.0001f;
+        }
+
+        if (!hasFallbackInput && Keyboard.current != null)
+        {
+            if (Keyboard.current.aKey.isPressed || Keyboard.current.leftArrowKey.isPressed)
+                fallbackMove.x -= 1f;
+            if (Keyboard.current.dKey.isPressed || Keyboard.current.rightArrowKey.isPressed)
+                fallbackMove.x += 1f;
+            if (Keyboard.current.sKey.isPressed || Keyboard.current.downArrowKey.isPressed)
+                fallbackMove.y -= 1f;
+            if (Keyboard.current.wKey.isPressed || Keyboard.current.upArrowKey.isPressed)
+                fallbackMove.y += 1f;
+
+            if (Keyboard.current.eKey.wasPressedThisFrame)
+            {
+                _fallbackInteractRequested = true;
+            }
+        }
 
         _moveInput = Vector2.ClampMagnitude(fallbackMove, 1f);
+    }
 
-        if (Keyboard.current.eKey.wasPressedThisFrame)
+    private void ProcessActionInteraction()
+    {
+        if (_interactAction == null || !_interactAction.enabled)
         {
-            _fallbackInteractRequested = true;
+            return;
+        }
+
+        if (_interactAction.WasPressedThisFrame())
+        {
+            _currentInteractable?.Interact(this);
         }
     }
 

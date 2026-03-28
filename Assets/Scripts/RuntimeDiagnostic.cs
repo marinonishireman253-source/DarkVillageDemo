@@ -34,7 +34,7 @@ public class RuntimeDiagnostic : MonoBehaviour
         CameraFollow cf = FindFirstObjectByType<CameraFollow>();
         if (cf != null)
         {
-            Debug.Log($"[CameraFollow] 位置={cf.transform.position} target={cf.target}");
+            Debug.Log($"[CameraFollow] 位置={cf.transform.position} target={cf.Target}");
         }
         else
         {
