@@ -68,6 +68,12 @@ public class GameBootstrap : MonoBehaviour
         {
             new GameObject("PortraitController").AddComponent<PortraitController>();
         }
+
+        // 诊断工具
+        if (FindFirstObjectByType<RuntimeDiagnostic>() == null)
+        {
+            new GameObject("RuntimeDiagnostic").AddComponent<RuntimeDiagnostic>();
+        }
     }
 
     private void EnsureFallbackInteractables()
