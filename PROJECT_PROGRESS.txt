@@ -1,0 +1,116 @@
+# DarkVillageDemo / Ersarn 项目进度
+
+> 这是项目接力文件。任何人接手前先读，完成一个动作后立即更新。
+> 目标：保证别人中途接手也能继续做，不用重新猜上下文。
+
+## 更新规则（必须遵守）
+- 每次开始前，先看“当前阶段 / 当前目标 / 最近改动 / 下一步”。
+- 每次完成后，立刻更新：
+  - 时间
+  - 改了什么
+  - 改到哪些文件
+  - 是否已验证
+  - 下一步做什么
+- 不要只写计划，不写结果。
+- 如果改到一半失败，也要记录失败点和当前状态。
+
+## 项目定位
+- 项目名：DarkVillageDemo
+- 代号：Ersarn
+- 类型：Unity 2.5D 黑暗叙事 RPG
+- 当前推进顺序：M0 可运行骨架 -> M1 探索闭环 -> M2 对话剧情闭环
+
+## 当前阶段
+- 阶段：M1 探索闭环
+- 当前目标：补齐最小任务闭环并扩展正式交互骨架（门 / 拾取物 / 触发器）
+
+## 已完成
+- 基础移动：已完成
+- 冲刺镜头拉近：已完成
+- 可交互物系统：已完成基础版
+- NPC 对话触发：已完成基础版
+- 对话 UI：已完成基础版
+- 交互提示 UI：已升级为正式两行提示（对象名 + 动作提示）
+- 任务标记最小版本：已完成两步任务流转代码，待场景内验证
+- 对白数据正式化：NPC / 石碑已接入 DialogueData
+- 场景文件修复：已修复 `Assets/Scenes/Main.unity` 尾部损坏残片
+
+## 最近改动
+- 已统一 IInteractable 接口，加入 PromptText / DisplayName
+- 已统一 InteractableBase 的对象名/动作名骨架
+- 已收口 TestNpcInteractable 的显示名逻辑
+- 已为 TestStoneInteractable 增加默认显示名“石碑”
+- 已改造 InteractionPromptUI 为更正式样式
+- 已新增 QuestTracker / QuestObjectiveTarget / QuestTrackerUI
+- 已接入 GameBootstrap，启动时自动创建任务系统与任务 UI
+- 已让第一个 TestNpcInteractable 自动成为当前目标，不只 fallback NPC 生效
+- 已在 NPC 交互时触发当前目标完成
+- 已补成最小两步任务流转：守夜人 -> 石碑
+- 已修复任务重复完成时“已完成：”前缀叠加
+- 已补上对话 UI / 任务 UI / 交互提示 UI 的空纹理兜底
+- 已新增门 / 拾取物 / 触发器三类最小交互骨架
+
+## 当前状态
+- 已完成代码接线
+- 已完成快速静态检查
+- 当前待做：进 Unity 内验证现有任务流、日志状态，以及新交互骨架是否正常挂接
+
+## 下一步
+1. 进 Unity 验证游戏内是否能看到：
+   - 左上角当前目标先显示“与守夜人交谈”
+   - NPC 头顶世界标记
+   - 与守夜人交谈后切到“查看石碑上的文字”
+   - 石碑头顶出现世界标记
+   - 查看石碑后目标完成
+2. 在场景里放入并验证：
+   - DoorInteractable
+   - PickupInteractable
+   - TriggerZoneObjective
+3. 如果验证不通过：按实际表现修 UI / 目标绑定 / 完成逻辑 / 场景挂接
+4. 如果验证通过：继续做更正式的任务流转和交互资产化
+
+## 关键文件
+- Assets/Scripts/PlayerMover.cs
+- Assets/Scripts/CameraFollow.cs
+- Assets/Scripts/IInteractable.cs
+- Assets/Scripts/InteractableBase.cs
+- Assets/Scripts/InteractionPromptUI.cs
+- Assets/Scripts/SimpleDialogueUI.cs
+- Assets/Scripts/TestNpcInteractable.cs
+- Assets/Scripts/TestStoneInteractable.cs
+- Assets/Scripts/GameBootstrap.cs
+- Assets/Scripts/QuestTracker.cs
+- Assets/Scripts/QuestObjectiveTarget.cs
+- Assets/Scripts/QuestTrackerUI.cs
+- Assets/Scripts/DoorInteractable.cs
+- Assets/Scripts/PickupInteractable.cs
+- Assets/Scripts/TriggerZoneObjective.cs
+
+## 最新记录
+- 时间：2026-03-28 18:47 Asia/Shanghai
+- 动作：代码审查 + Bug 修复
+- 修复内容：
+  1. QuestTrackerUI：修复任务完成横幅双重"已完成："前缀叠加问题
+  2. TestStoneInteractable：将直接材质赋值改为 MaterialPropertyBlock，避免材质实例泄漏，与 TestNpcInteractable 保持统一
+  3. PickupInteractable：检查确认 Destroy 时序安全（NotifyInteracted 在 Destroy 前执行），无改动
+- 修改文件：
+  - Assets/Scripts/QuestTrackerUI.cs
+  - Assets/Scripts/TestStoneInteractable.cs
+- 当前验证：已完成代码级静态检查
+- 下一步：推 M2 对话剧情闭环（选项分支 / 立绘切换 / 剧情事件桥接）
+
+## 最早记录
+- 时间：2026-03-26 19:19 Asia/Shanghai
+- 动作：继续把任务系统从“能跑”往“可场景接线”收口。已调整 GameBootstrap：现在只在对象缺少 QuestObjectiveTarget 时才补默认目标配置；若场景里本来已经手工挂好 objective，就保留现有 id / 文案 / nextObjective，不再在运行时强覆盖。同时补了 `AutoRegisterOnStart` 只读暴露，用于判断场景里是否已有明确的起始目标。中途一次编辑把 `GameBootstrap.cs` 尾部写坏，已当场重写修复为干净版本
+- 修改文件：
+  - Assets/Scripts/GameBootstrap.cs
+  - Assets/Scripts/QuestObjectiveTarget.cs
+  - PROJECT_PROGRESS.txt
+- 当前验证：已完成代码级修复与静态检查；当前重点验证 `GameBootstrap.cs` 与 `QuestObjectiveTarget.cs` 结构完整且不再保留尾部残片。逻辑上已避免运行时把场景内手工接好的任务配置覆盖掉
+- 接手者下一步：进入 Unity Main 场景后优先做两类实测——1）纯代码 fallback 链路仍可自动生成并推进；2）若在场景对象上手工挂 QuestObjectiveTarget 并设置自定义文案 / nextObjective，运行时不会被 GameBootstrap 改回默认值
+
+## 接手备注
+- 企划参考目录：/Users/kuzao/Documents/openclaw/workspace-codex/research/unity-2.5d-dev-pack/
+- 当前项目目录里没有额外企划 txt；企划在上面的 research 目录
+- 当前优先级不是大扩张，而是把 M1 闭环做实
+- 长任务 watchdog 已启用，会按接力文件继续推进
