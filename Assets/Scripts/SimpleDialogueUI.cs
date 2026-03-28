@@ -6,6 +6,9 @@ public class SimpleDialogueUI : MonoBehaviour
 {
     public static SimpleDialogueUI Instance { get; private set; }
     public static bool IsOpen => Instance != null && Instance._isOpen;
+    public static bool AllLinesShown => Instance != null && Instance._currentLineIndex >= Instance._lines.Count - 1;
+
+    public event System.Action OnAllLinesCompleted;
 
     private static Texture2D s_WhiteTexture;
 
@@ -173,6 +176,16 @@ public class SimpleDialogueUI : MonoBehaviour
         if (HasMoreLines)
         {
             _currentLineIndex++;
+            return;
+        }
+
+        // 所有行都显示完了
+        OnAllLinesCompleted?.Invoke();
+
+        // 如果有 DialogueRunner 在运行，通知它推进
+        if (DialogueRunner.IsActive)
+        {
+            DialogueRunner.Instance?.Advance();
             return;
         }
 

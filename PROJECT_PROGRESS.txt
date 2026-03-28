@@ -4,7 +4,7 @@
 > 目标：保证别人中途接手也能继续做，不用重新猜上下文。
 
 ## 更新规则（必须遵守）
-- 每次开始前，先看“当前阶段 / 当前目标 / 最近改动 / 下一步”。
+- 每次开始前，先看"当前阶段 / 当前目标 / 最近改动 / 下一步"。
 - 每次完成后，立刻更新：
   - 时间
   - 改了什么
@@ -21,8 +21,20 @@
 - 当前推进顺序：M0 可运行骨架 -> M1 探索闭环 -> M2 对话剧情闭环
 
 ## 当前阶段
-- 阶段：M1 探索闭环
-- 当前目标：补齐最小任务闭环并扩展正式交互骨架（门 / 拾取物 / 触发器）
+- 阶段：M2 对话与剧情闭环（进行中）
+- 当前目标：完成对话分支、立绘切换、剧情事件桥接、章节状态管理
+
+## M2 新增功能
+- DialogueNode / DialogueChoice / DialogueEvent：数据驱动的对话节点 ScriptableObject，支持选项分支和剧情事件
+- DialogueRunner：对话流程控制器，管理节点切换、选项选择、事件触发
+- DialogueEventSystem：剧情事件系统，支持任务触发、标记设置、自定义事件注册
+- DialogueChoiceUI：选项分支 UI，支持上下键选择 + Enter/Space 确认
+- DialogueUIBridge：桥接 DialogueRunner 与 SimpleDialogueUI，自动驱动对话文本显示
+- PortraitController：立绘切换控制器，按 speakerName 匹配并显示角色立绘
+- DialogueInteractable：对话型交互组件，替代 TestNpcInteractable 的硬编码方式
+- ChapterStateManager：章节状态管理，支持标记和收集物追踪
+- SimpleDialogueUI 改造：新增 OnAllLinesCompleted 事件，与 DialogueRunner 双向联动
+- GameBootstrap 更新：自动创建 M2 对话系统组件
 
 ## 已完成
 - 基础移动：已完成
@@ -39,14 +51,14 @@
 - 已统一 IInteractable 接口，加入 PromptText / DisplayName
 - 已统一 InteractableBase 的对象名/动作名骨架
 - 已收口 TestNpcInteractable 的显示名逻辑
-- 已为 TestStoneInteractable 增加默认显示名“石碑”
+- 已为 TestStoneInteractable 增加默认显示名"石碑"
 - 已改造 InteractionPromptUI 为更正式样式
 - 已新增 QuestTracker / QuestObjectiveTarget / QuestTrackerUI
 - 已接入 GameBootstrap，启动时自动创建任务系统与任务 UI
 - 已让第一个 TestNpcInteractable 自动成为当前目标，不只 fallback NPC 生效
 - 已在 NPC 交互时触发当前目标完成
 - 已补成最小两步任务流转：守夜人 -> 石碑
-- 已修复任务重复完成时“已完成：”前缀叠加
+- 已修复任务重复完成时"已完成："前缀叠加
 - 已补上对话 UI / 任务 UI / 交互提示 UI 的空纹理兜底
 - 已新增门 / 拾取物 / 触发器三类最小交互骨架
 
@@ -55,19 +67,22 @@
 - 已完成快速静态检查
 - 当前待做：进 Unity 内验证现有任务流、日志状态，以及新交互骨架是否正常挂接
 
-## 下一步
-1. 进 Unity 验证游戏内是否能看到：
-   - 左上角当前目标先显示“与守夜人交谈”
-   - NPC 头顶世界标记
-   - 与守夜人交谈后切到“查看石碑上的文字”
-   - 石碑头顶出现世界标记
-   - 查看石碑后目标完成
-2. 在场景里放入并验证：
-   - DoorInteractable
-   - PickupInteractable
-   - TriggerZoneObjective
-3. 如果验证不通过：按实际表现修 UI / 目标绑定 / 完成逻辑 / 场景挂接
-4. 如果验证通过：继续做更正式的任务流转和交互资产化
+## 下一步（M2 场景内验证）
+1. 创建 DialogueNode ScriptableObject（例：守夜人对话含2个选项）
+2. 在 NPC 上挂 DialogueInteractable 并绑定 startNode
+3. 验证完整链路：E 交互 → 对话启动 → 逐行显示 → 出现选项 → 上下键选择 → Enter 确认 → 对话结束
+4. 可选：配置 PortraitController 立绘数据
+5. 可选：用 DialogueEvent 链接任务完成
+
+## 验证清单（M2）
+- [ ] DialogueRunner 启动后 SimpleDialogueUI 逐行显示
+- [ ] DialogueNode 含选项时，行显示完后出现选项 UI
+- [ ] 上下键切换选项，Enter/Space 确认
+- [ ] 选项确认后跳转到 nextNode
+- [ ] 无 nextNode 的选项结束对话
+- [ ] PortraitController 按 speakerName 显示立绘
+- [ ] DialogueEvent.SetFlag 可设置标记
+- [ ] DialogueEvent.TriggerQuest 可触发任务完成
 
 ## 关键文件
 - Assets/Scripts/PlayerMover.cs
@@ -98,16 +113,33 @@
   - Assets/Scripts/TestStoneInteractable.cs
 - 当前验证：已完成代码级静态检查
 - 下一步：推 M2 对话剧情闭环（选项分支 / 立绘切换 / 剧情事件桥接）
+- 时间：2026-03-28 19:00 Asia/Shanghai
+- 动作：M2 对话剧情系统全套脚本开发
+- 新增文件：
+  - Assets/Scripts/DialogueNode.cs - 对话节点 + 选项 + 事件数据
+  - Assets/Scripts/DialogueRunner.cs - 对话流程控制器
+  - Assets/Scripts/DialogueEventSystem.cs - 剧情事件分发系统
+  - Assets/Scripts/DialogueChoiceUI.cs - 选项分支 UI
+  - Assets/Scripts/DialogueUIBridge.cs - Runner↔UI 桥接
+  - Assets/Scripts/PortraitController.cs - 立绘切换
+  - Assets/Scripts/DialogueInteractable.cs - 对话型交互组件
+  - Assets/Scripts/ChapterStateManager.cs - 章节状态管理
+- 修改文件：
+  - Assets/Scripts/SimpleDialogueUI.cs - 新增 OnAllLinesCompleted 事件，与 DialogueRunner 联动
+  - Assets/Scripts/GameBootstrap.cs - EnsureUi 中新增 M2 系统自动创建
+  - Assets/Scripts/DialogueChoiceUI.cs - 修复字符串插值 bug (_i → i)
+- 当前验证：代码级静态检查完成，待进 Unity 场景验证
+- 接手者下一步：在 Unity 中创建 DialogueNode 资产，挂载 DialogueInteractable 到 NPC，验证选项分支和立绘显示
 
 ## 最早记录
 - 时间：2026-03-26 19:19 Asia/Shanghai
-- 动作：继续把任务系统从“能跑”往“可场景接线”收口。已调整 GameBootstrap：现在只在对象缺少 QuestObjectiveTarget 时才补默认目标配置；若场景里本来已经手工挂好 objective，就保留现有 id / 文案 / nextObjective，不再在运行时强覆盖。同时补了 `AutoRegisterOnStart` 只读暴露，用于判断场景里是否已有明确的起始目标。中途一次编辑把 `GameBootstrap.cs` 尾部写坏，已当场重写修复为干净版本
+- 动作：继续把任务系统从"能跑"往"可场景接线"收口。已调整 GameBootstrap：现在只在对象缺少 QuestObjectiveTarget 时才补默认目标配置；若场景里本来已经手工挂好 objective，就保留现有 id / 文案 / nextObjective，不再在运行时强覆盖。同时补了 `AutoRegisterOnStart` 只读暴露，用于判断场景里是否已有明确的起始目标。中途一次编辑把 `GameBootstrap.cs` 尾部写坏，已当场重写修复为干净版本
 - 修改文件：
   - Assets/Scripts/GameBootstrap.cs
   - Assets/Scripts/QuestObjectiveTarget.cs
   - PROJECT_PROGRESS.txt
 - 当前验证：已完成代码级修复与静态检查；当前重点验证 `GameBootstrap.cs` 与 `QuestObjectiveTarget.cs` 结构完整且不再保留尾部残片。逻辑上已避免运行时把场景内手工接好的任务配置覆盖掉
-- 接手者下一步：进入 Unity Main 场景后优先做两类实测——1）纯代码 fallback 链路仍可自动生成并推进；2）若在场景对象上手工挂 QuestObjectiveTarget 并设置自定义文案 / nextObjective，运行时不会被 GameBootstrap 改回默认值
+- 接手者下一步：进入 Unity Main 场景后优先做两类实测--1）纯代码 fallback 链路仍可自动生成并推进；2）若在场景对象上手工挂 QuestObjectiveTarget 并设置自定义文案 / nextObjective，运行时不会被 GameBootstrap 改回默认值
 
 ## 接手备注
 - 企划参考目录：/Users/kuzao/Documents/openclaw/workspace-codex/research/unity-2.5d-dev-pack/

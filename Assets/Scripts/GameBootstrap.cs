@@ -47,6 +47,27 @@ public class GameBootstrap : MonoBehaviour
         {
             new GameObject("QuestTrackerUI").AddComponent<QuestTrackerUI>();
         }
+
+        // M2: 对话系统
+        if (FindFirstObjectByType<DialogueRunner>() == null)
+        {
+            new GameObject("DialogueRunner").AddComponent<DialogueRunner>();
+        }
+
+        if (FindFirstObjectByType<DialogueUIBridge>() == null)
+        {
+            new GameObject("DialogueUIBridge").AddComponent<DialogueUIBridge>();
+        }
+
+        if (FindFirstObjectByType<DialogueChoiceUI>() == null)
+        {
+            new GameObject("DialogueChoiceUI").AddComponent<DialogueChoiceUI>();
+        }
+
+        if (FindFirstObjectByType<PortraitController>() == null)
+        {
+            new GameObject("PortraitController").AddComponent<PortraitController>();
+        }
     }
 
     private void EnsureFallbackInteractables()
