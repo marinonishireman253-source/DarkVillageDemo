@@ -1,11 +1,13 @@
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
+using UnityEngine.SceneManagement;
 
 public class GameBootstrap : MonoBehaviour
 {
     private static readonly Vector3 DefaultPlayerSpawnPosition = new Vector3(0f, 1f, 0f);
-    private static readonly Vector3 DefaultCameraOffset = new Vector3(-7.5f, 6f, -8.5f);
+    private static readonly Vector3 DefaultCameraOffset = new Vector3(-7f, 8f, -7f);
     private static readonly Vector3 DefaultCameraLookOffset = new Vector3(0f, 0.5f, 0f);
+    private static readonly Vector3 DefaultCameraEulerAngles = new Vector3(42f, 45f, 0f);
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Bootstrap()
@@ -22,6 +24,11 @@ public class GameBootstrap : MonoBehaviour
 
     private void Start()
     {
+        if (!IsExplorationScene())
+        {
+            return;
+        }
+
         EnsureCoreWorld();
         EnsureSystems();
         EnsureUi();
@@ -76,7 +83,6 @@ public class GameBootstrap : MonoBehaviour
             mainCamera = FindFirstObjectByType<Camera>();
         }
 
-        bool createdCamera = false;
         if (mainCamera == null)
         {
             GameObject cameraObject = new GameObject("Main Camera");
@@ -84,7 +90,6 @@ public class GameBootstrap : MonoBehaviour
             mainCamera = cameraObject.AddComponent<Camera>();
             cameraObject.AddComponent<AudioListener>();
             cameraObject.AddComponent<UniversalAdditionalCameraData>();
-            createdCamera = true;
         }
 
         GameObject cameraRoot = mainCamera.gameObject;
@@ -104,6 +109,7 @@ public class GameBootstrap : MonoBehaviour
         }
 
         mainCamera.orthographic = false;
+        mainCamera.fieldOfView = 50f;
         mainCamera.transform.position = player.transform.position + DefaultCameraOffset;
 
         CameraFollow follow = cameraRoot.GetComponent<CameraFollow>();
@@ -112,12 +118,7 @@ public class GameBootstrap : MonoBehaviour
             follow = cameraRoot.AddComponent<CameraFollow>();
         }
 
-        follow.Configure(DefaultCameraOffset, false, DefaultCameraLookOffset);
-
-        if (createdCamera)
-        {
-            mainCamera.fieldOfView = 60f;
-        }
+        follow.Configure(DefaultCameraOffset, false, DefaultCameraLookOffset, DefaultCameraEulerAngles);
 
         follow.SetTarget(player.transform, true);
     }
@@ -374,5 +375,11 @@ public class GameBootstrap : MonoBehaviour
         }
 
         return false;
+    }
+
+    private bool IsExplorationScene()
+    {
+        string sceneName = SceneManager.GetActiveScene().name;
+        return sceneName != SceneLoader.BootSceneName && sceneName != SceneLoader.TitleSceneName;
     }
 }

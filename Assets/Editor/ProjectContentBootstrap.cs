@@ -1,5 +1,9 @@
 #if UNITY_EDITOR
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
 
 [InitializeOnLoad]
@@ -11,6 +15,14 @@ public static class ProjectContentBootstrap
     private const string PrefabFolder = "Assets/Prefabs";
     private const string NpcPrefabPath = "Assets/Prefabs/TestNpc.prefab";
     private const string StonePrefabPath = "Assets/Prefabs/TestStone.prefab";
+    private const string ScenesFolder = "Assets/Scenes";
+    private const string BootSceneFolder = "Assets/Scenes/Boot";
+    private const string TitleSceneFolder = "Assets/Scenes/Title";
+    private const string BootScenePath = "Assets/Scenes/Boot/Boot.unity";
+    private const string TitleScenePath = "Assets/Scenes/Title/Title.unity";
+    private const string MainScenePath = "Assets/Scenes/Main.unity";
+    private const string BootSceneControllerScriptPath = "Assets/Scripts/Core/BootSceneController.cs";
+    private const string TitleMenuScriptPath = "Assets/Scripts/UI/TitleMenuUI.cs";
 
     static ProjectContentBootstrap()
     {
@@ -19,6 +31,12 @@ public static class ProjectContentBootstrap
 
     private static void EnsureProjectContent()
     {
+        if (EditorApplication.isPlayingOrWillChangePlaymode)
+        {
+            EditorApplication.delayCall += EnsureProjectContent;
+            return;
+        }
+
         if (EditorApplication.isCompiling || EditorApplication.isUpdating)
         {
             EditorApplication.delayCall += EnsureProjectContent;
@@ -49,6 +67,8 @@ public static class ProjectContentBootstrap
 
         EnsureNpcPrefab(npcDialogue);
         EnsureStonePrefab(stoneDialogue);
+        EnsureCoreScenes();
+        EnsureBuildSettings();
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
     }
@@ -68,6 +88,21 @@ public static class ProjectContentBootstrap
         if (!AssetDatabase.IsValidFolder(PrefabFolder))
         {
             AssetDatabase.CreateFolder("Assets", "Prefabs");
+        }
+
+        if (!AssetDatabase.IsValidFolder(ScenesFolder))
+        {
+            AssetDatabase.CreateFolder("Assets", "Scenes");
+        }
+
+        if (!AssetDatabase.IsValidFolder(BootSceneFolder))
+        {
+            AssetDatabase.CreateFolder(ScenesFolder, "Boot");
+        }
+
+        if (!AssetDatabase.IsValidFolder(TitleSceneFolder))
+        {
+            AssetDatabase.CreateFolder(ScenesFolder, "Title");
         }
     }
 
@@ -198,6 +233,126 @@ public static class ProjectContentBootstrap
         {
             Object.DestroyImmediate(root);
         }
+    }
+
+    private static void EnsureCoreScenes()
+    {
+        SceneSetup[] previousSetup = EditorSceneManager.GetSceneManagerSetup();
+
+        try
+        {
+            EnsureBootScene();
+            EnsureTitleScene();
+        }
+        finally
+        {
+            if (previousSetup != null && previousSetup.Length > 0)
+            {
+                EditorSceneManager.RestoreSceneManagerSetup(previousSetup);
+            }
+        }
+    }
+
+    private static void EnsureBootScene()
+    {
+        if (File.Exists(BootScenePath))
+        {
+            return;
+        }
+
+        var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        GameObject root = new GameObject("BootSceneController");
+        AddScriptComponent(root, BootSceneControllerScriptPath);
+
+        EditorSceneManager.SaveScene(scene, BootScenePath);
+        Debug.Log($"[ProjectContentBootstrap] Created scene at {BootScenePath}");
+    }
+
+    private static void EnsureTitleScene()
+    {
+        if (File.Exists(TitleScenePath))
+        {
+            return;
+        }
+
+        var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+
+        GameObject cameraRoot = new GameObject("Main Camera");
+        cameraRoot.tag = "MainCamera";
+        Camera camera = cameraRoot.AddComponent<Camera>();
+        camera.backgroundColor = new Color(0.02f, 0.02f, 0.03f, 1f);
+        camera.clearFlags = CameraClearFlags.SolidColor;
+        camera.nearClipPlane = 0.1f;
+        camera.farClipPlane = 100f;
+        cameraRoot.AddComponent<AudioListener>();
+
+        GameObject titleRoot = new GameObject("TitleMenuUI");
+        AddScriptComponent(titleRoot, TitleMenuScriptPath);
+
+        EditorSceneManager.SaveScene(scene, TitleScenePath);
+        Debug.Log($"[ProjectContentBootstrap] Created scene at {TitleScenePath}");
+    }
+
+    private static void EnsureBuildSettings()
+    {
+        var preferredOrder = new List<string> { BootScenePath, TitleScenePath };
+
+        if (File.Exists(MainScenePath))
+        {
+            preferredOrder.Add(MainScenePath);
+        }
+
+        var existingScenes = EditorBuildSettings.scenes.ToDictionary(scene => scene.path, scene => scene);
+        var newScenes = new List<EditorBuildSettingsScene>();
+
+        foreach (string path in preferredOrder)
+        {
+            if (!File.Exists(path))
+            {
+                continue;
+            }
+
+            if (existingScenes.TryGetValue(path, out EditorBuildSettingsScene existing))
+            {
+                existing.enabled = true;
+                newScenes.Add(existing);
+            }
+            else
+            {
+                newScenes.Add(new EditorBuildSettingsScene(path, true));
+            }
+        }
+
+        foreach (EditorBuildSettingsScene scene in EditorBuildSettings.scenes)
+        {
+            if (newScenes.Any(existing => existing.path == scene.path))
+            {
+                continue;
+            }
+
+            newScenes.Add(scene);
+        }
+
+        EditorBuildSettings.scenes = newScenes.ToArray();
+    }
+
+    private static void AddScriptComponent(GameObject target, string scriptPath)
+    {
+        MonoScript script = AssetDatabase.LoadAssetAtPath<MonoScript>(scriptPath);
+        if (script == null)
+        {
+            Debug.LogWarning($"[ProjectContentBootstrap] Script not found at {scriptPath}");
+            return;
+        }
+
+        System.Type componentType = script.GetClass();
+        if (componentType == null)
+        {
+            Debug.LogWarning($"[ProjectContentBootstrap] Script at {scriptPath} has no class yet");
+            return;
+        }
+
+        target.AddComponent(componentType);
     }
 }
 #endif

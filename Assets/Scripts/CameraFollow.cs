@@ -3,17 +3,19 @@ using UnityEngine;
 public class CameraFollow : MonoBehaviour
 {
     [SerializeField] private Transform target;
-    [SerializeField] private Vector3 offset = new Vector3(0f, 6f, -10f);
+    [SerializeField] private Vector3 offset = new Vector3(-7f, 8f, -7f);
     [SerializeField] private float followSmoothTime = 0.16f;
     [SerializeField] private bool followOnStart = true;
     [SerializeField] private bool preserveInitialOffset = true;
+    [SerializeField] private bool useFixedRotation = true;
+    [SerializeField] private Vector3 fixedEulerAngles = new Vector3(42f, 45f, 0f);
     [SerializeField] private bool lookAtTarget = true;
     [SerializeField] private Vector3 lookAtOffset = Vector3.zero;
     [SerializeField] private float rotationLerpSpeed = 8f;
 
     [Header("Sprint Feel")]
     [SerializeField] private PlayerMover playerMover;
-    [SerializeField] private Vector3 sprintOffsetDelta = new Vector3(0f, 0.35f, -1.25f);
+    [SerializeField] private Vector3 sprintOffsetDelta = new Vector3(-0.3f, 0.15f, -0.3f);
     [SerializeField] private float sprintCameraLerpSpeed = 5f;
 
     private Vector3 _velocity;
@@ -23,12 +25,13 @@ public class CameraFollow : MonoBehaviour
 
     public Transform Target => target;
 
-    public void Configure(Vector3 newOffset, bool useInitialOffset, Vector3 newLookAtOffset)
+    public void Configure(Vector3 newOffset, bool useInitialOffset, Vector3 newLookAtOffset, Vector3 newFixedEulerAngles)
     {
         offset = newOffset;
         preserveInitialOffset = useInitialOffset;
         lookAtOffset = newLookAtOffset;
-        lookAtTarget = true;
+        fixedEulerAngles = newFixedEulerAngles;
+        useFixedRotation = true;
     }
 
     private void Start()
@@ -137,6 +140,12 @@ public class CameraFollow : MonoBehaviour
 
     private void UpdateRotation(float deltaTime)
     {
+        if (useFixedRotation)
+        {
+            transform.rotation = Quaternion.Euler(fixedEulerAngles);
+            return;
+        }
+
         if (!lookAtTarget)
         {
             return;
@@ -149,6 +158,12 @@ public class CameraFollow : MonoBehaviour
 
     private void SnapRotation()
     {
+        if (useFixedRotation)
+        {
+            transform.rotation = Quaternion.Euler(fixedEulerAngles);
+            return;
+        }
+
         if (!lookAtTarget)
         {
             return;
