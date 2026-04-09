@@ -57,14 +57,16 @@ public class QuestTrackerUI : MonoBehaviour
     private void DrawObjectivePanel(QuestTracker tracker)
     {
         float width = Mathf.Clamp(Screen.width * 0.28f, 280f, 420f);
-        float height = 64f;
-        Rect rect = new Rect(24f, 24f, width, height);
+        float contentWidth = width - 28f;
+        float bodyHeight = Mathf.Max(24f, _bodyStyle.CalcHeight(new GUIContent(tracker.CurrentObjectiveText), contentWidth));
+        float height = Mathf.Clamp(bodyHeight + 40f, 64f, 118f);
+        Rect rect = new Rect(Screen.width - width - 24f, 24f, width, height);
 
         DrawRect(rect, new Color(0.05f, 0.06f, 0.08f, 0.82f));
         DrawRect(new Rect(rect.x + 3f, rect.y + 3f, rect.width - 6f, rect.height - 6f), new Color(0.12f, 0.14f, 0.17f, 0.62f));
 
         GUI.Label(new Rect(rect.x + 14f, rect.y + 8f, rect.width - 28f, 20f), tracker.IsCompleted ? "任务更新" : "当前目标", _titleStyle);
-        GUI.Label(new Rect(rect.x + 14f, rect.y + 28f, rect.width - 28f, 24f), tracker.CurrentObjectiveText, _bodyStyle);
+        GUI.Label(new Rect(rect.x + 14f, rect.y + 28f, rect.width - 28f, rect.height - 36f), tracker.CurrentObjectiveText, _bodyStyle);
     }
 
     private void DrawWorldMarker(QuestTracker tracker)
@@ -83,7 +85,11 @@ public class QuestTrackerUI : MonoBehaviour
 
         float x = screenPosition.x - 48f;
         float y = Screen.height - screenPosition.y - 56f;
-        Rect rect = new Rect(x, y, 96f, 28f);
+        float width = 96f;
+        float height = 28f;
+        x = Mathf.Clamp(x, 16f, Screen.width - width - 16f);
+        y = Mathf.Clamp(y, 96f, Screen.height - height - 16f);
+        Rect rect = new Rect(x, y, width, height);
 
         DrawRect(rect, new Color(0.83f, 0.71f, 0.49f, 0.92f));
         GUI.Label(rect, tracker.CurrentMarkerText, _markerStyle);
@@ -97,14 +103,15 @@ public class QuestTrackerUI : MonoBehaviour
         }
 
         float width = Mathf.Clamp(Screen.width * 0.3f, 320f, 460f);
-        float height = 52f;
+        float bodyHeight = Mathf.Max(24f, _bodyStyle.CalcHeight(new GUIContent(_completedBannerText), width - 32f));
+        float height = Mathf.Clamp(bodyHeight + 28f, 52f, 96f);
         float x = (Screen.width - width) * 0.5f;
         float y = 26f;
         Rect rect = new Rect(x, y, width, height);
 
         DrawRect(rect, new Color(0.12f, 0.17f, 0.12f, 0.88f));
         DrawRect(new Rect(rect.x + 3f, rect.y + 3f, rect.width - 6f, rect.height - 6f), new Color(0.2f, 0.28f, 0.18f, 0.76f));
-        GUI.Label(new Rect(rect.x + 16f, rect.y + 14f, rect.width - 32f, 24f), _completedBannerText, _bodyStyle);
+        GUI.Label(new Rect(rect.x + 16f, rect.y + 14f, rect.width - 32f, rect.height - 20f), _completedBannerText, _bodyStyle);
     }
 
     private void EnsureWhiteTexture()

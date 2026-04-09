@@ -18,9 +18,16 @@ public static class ProjectContentBootstrap
     private const string ScenesFolder = "Assets/Scenes";
     private const string BootSceneFolder = "Assets/Scenes/Boot";
     private const string TitleSceneFolder = "Assets/Scenes/Title";
+    private const string PrologueSceneFolder = "Assets/Scenes/Prologue";
+    private const string Chapter01SceneFolder = "Assets/Scenes/Chapter01";
     private const string BootScenePath = "Assets/Scenes/Boot/Boot.unity";
     private const string TitleScenePath = "Assets/Scenes/Title/Title.unity";
     private const string MainScenePath = "Assets/Scenes/Main.unity";
+    private const string PrologueEventRoomScenePath = "Assets/Scenes/Prologue/Prologue_EventRoom.unity";
+    private const string Chapter01RedCreekEntranceScenePath = "Assets/Scenes/Chapter01/Chapter01_RedCreek_Entrance.unity";
+    private const string Chapter01RedCreekCoreScenePath = "Assets/Scenes/Chapter01/Chapter01_RedCreek_Core.unity";
+    private const string Chapter01BossHouseScenePath = "Assets/Scenes/Chapter01/Chapter01_BossHouse.unity";
+    private const string Chapter01EndScenePath = "Assets/Scenes/Chapter01/Chapter01_End.unity";
     private const string BootSceneControllerScriptPath = "Assets/Scripts/Core/BootSceneController.cs";
     private const string TitleMenuScriptPath = "Assets/Scripts/UI/TitleMenuUI.cs";
 
@@ -29,11 +36,15 @@ public static class ProjectContentBootstrap
         EditorApplication.delayCall += EnsureProjectContent;
     }
 
+    public static void RunContentBootstrap()
+    {
+        EnsureProjectContent();
+    }
+
     private static void EnsureProjectContent()
     {
         if (EditorApplication.isPlayingOrWillChangePlaymode)
         {
-            EditorApplication.delayCall += EnsureProjectContent;
             return;
         }
 
@@ -69,6 +80,7 @@ public static class ProjectContentBootstrap
         EnsureStonePrefab(stoneDialogue);
         EnsureCoreScenes();
         EnsureBuildSettings();
+        EnsurePlayModeStartScene();
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
     }
@@ -103,6 +115,16 @@ public static class ProjectContentBootstrap
         if (!AssetDatabase.IsValidFolder(TitleSceneFolder))
         {
             AssetDatabase.CreateFolder(ScenesFolder, "Title");
+        }
+
+        if (!AssetDatabase.IsValidFolder(PrologueSceneFolder))
+        {
+            AssetDatabase.CreateFolder(ScenesFolder, "Prologue");
+        }
+
+        if (!AssetDatabase.IsValidFolder(Chapter01SceneFolder))
+        {
+            AssetDatabase.CreateFolder(ScenesFolder, "Chapter01");
         }
     }
 
@@ -237,12 +259,23 @@ public static class ProjectContentBootstrap
 
     private static void EnsureCoreScenes()
     {
+        if (EditorApplication.isPlayingOrWillChangePlaymode)
+        {
+            return;
+        }
+
         SceneSetup[] previousSetup = EditorSceneManager.GetSceneManagerSetup();
 
         try
         {
+            EnsureMainScenePreview();
             EnsureBootScene();
             EnsureTitleScene();
+            EnsurePrologueEventRoomScene();
+            EnsureChapter01RedCreekEntranceScene();
+            EnsureChapter01RedCreekCoreScene();
+            EnsureChapter01BossHouseScene();
+            EnsureChapter01EndScene();
         }
         finally
         {
@@ -251,6 +284,69 @@ public static class ProjectContentBootstrap
                 EditorSceneManager.RestoreSceneManagerSetup(previousSetup);
             }
         }
+    }
+
+    private static void EnsureMainScenePreview()
+    {
+        if (!File.Exists(MainScenePath))
+        {
+            return;
+        }
+
+        var scene = EditorSceneManager.OpenScene(MainScenePath, OpenSceneMode.Single);
+        GameObject existingRoot = GameObject.Find("__PrologueStreetSlice");
+        if (existingRoot != null)
+        {
+            Object.DestroyImmediate(existingRoot);
+        }
+
+        PlayerMover player = Object.FindFirstObjectByType<PlayerMover>();
+        if (player == null)
+        {
+            GameObject playerRoot = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+            playerRoot.name = "Player";
+            playerRoot.transform.position = new Vector3(0f, 1f, 0f);
+            player = playerRoot.AddComponent<PlayerMover>();
+        }
+
+        Camera mainCamera = Camera.main;
+        if (mainCamera == null)
+        {
+            GameObject cameraRoot = new GameObject("Main Camera");
+            cameraRoot.tag = "MainCamera";
+            mainCamera = cameraRoot.AddComponent<Camera>();
+            cameraRoot.AddComponent<AudioListener>();
+        }
+
+        mainCamera.enabled = true;
+        mainCamera.tag = "MainCamera";
+        mainCamera.orthographic = false;
+        mainCamera.fieldOfView = 50f;
+        mainCamera.nearClipPlane = 0.3f;
+        mainCamera.farClipPlane = 1000f;
+        mainCamera.transform.position = new Vector3(-7f, 9f, -7f);
+        mainCamera.transform.rotation = Quaternion.Euler(42f, 45f, 0f);
+
+        if (GameObject.Find("Ground") == null)
+        {
+            GameObject ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
+            ground.name = "Ground";
+            ground.transform.position = Vector3.zero;
+            ground.transform.localScale = new Vector3(6f, 1f, 6f);
+        }
+        else
+        {
+            GameObject ground = GameObject.Find("Ground");
+            if (ground != null)
+            {
+                ground.transform.position = Vector3.zero;
+                ground.transform.localScale = new Vector3(6f, 1f, 6f);
+            }
+        }
+
+        PrologueStreetSlice.Ensure(player);
+        EditorSceneManager.MarkSceneDirty(scene);
+        EditorSceneManager.SaveScene(scene, MainScenePath);
     }
 
     private static void EnsureBootScene()
@@ -293,6 +389,66 @@ public static class ProjectContentBootstrap
         Debug.Log($"[ProjectContentBootstrap] Created scene at {TitleScenePath}");
     }
 
+    private static void EnsurePrologueEventRoomScene()
+    {
+        if (File.Exists(PrologueEventRoomScenePath))
+        {
+            return;
+        }
+
+        var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        EditorSceneManager.SaveScene(scene, PrologueEventRoomScenePath);
+        Debug.Log($"[ProjectContentBootstrap] Created scene at {PrologueEventRoomScenePath}");
+    }
+
+    private static void EnsureChapter01RedCreekEntranceScene()
+    {
+        if (File.Exists(Chapter01RedCreekEntranceScenePath))
+        {
+            return;
+        }
+
+        var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        EditorSceneManager.SaveScene(scene, Chapter01RedCreekEntranceScenePath);
+        Debug.Log($"[ProjectContentBootstrap] Created scene at {Chapter01RedCreekEntranceScenePath}");
+    }
+
+    private static void EnsureChapter01RedCreekCoreScene()
+    {
+        if (File.Exists(Chapter01RedCreekCoreScenePath))
+        {
+            return;
+        }
+
+        var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        EditorSceneManager.SaveScene(scene, Chapter01RedCreekCoreScenePath);
+        Debug.Log($"[ProjectContentBootstrap] Created scene at {Chapter01RedCreekCoreScenePath}");
+    }
+
+    private static void EnsureChapter01BossHouseScene()
+    {
+        if (File.Exists(Chapter01BossHouseScenePath))
+        {
+            return;
+        }
+
+        var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        EditorSceneManager.SaveScene(scene, Chapter01BossHouseScenePath);
+        Debug.Log($"[ProjectContentBootstrap] Created scene at {Chapter01BossHouseScenePath}");
+    }
+
+    private static void EnsureChapter01EndScene()
+    {
+        if (File.Exists(Chapter01EndScenePath))
+        {
+            return;
+        }
+
+        var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        EditorSceneManager.SaveScene(scene, Chapter01EndScenePath);
+        Debug.Log($"[ProjectContentBootstrap] Created scene at {Chapter01EndScenePath}");
+    }
+
     private static void EnsureBuildSettings()
     {
         var preferredOrder = new List<string> { BootScenePath, TitleScenePath };
@@ -300,6 +456,31 @@ public static class ProjectContentBootstrap
         if (File.Exists(MainScenePath))
         {
             preferredOrder.Add(MainScenePath);
+        }
+
+        if (File.Exists(PrologueEventRoomScenePath))
+        {
+            preferredOrder.Add(PrologueEventRoomScenePath);
+        }
+
+        if (File.Exists(Chapter01RedCreekEntranceScenePath))
+        {
+            preferredOrder.Add(Chapter01RedCreekEntranceScenePath);
+        }
+
+        if (File.Exists(Chapter01RedCreekCoreScenePath))
+        {
+            preferredOrder.Add(Chapter01RedCreekCoreScenePath);
+        }
+
+        if (File.Exists(Chapter01BossHouseScenePath))
+        {
+            preferredOrder.Add(Chapter01BossHouseScenePath);
+        }
+
+        if (File.Exists(Chapter01EndScenePath))
+        {
+            preferredOrder.Add(Chapter01EndScenePath);
         }
 
         var existingScenes = EditorBuildSettings.scenes.ToDictionary(scene => scene.path, scene => scene);
@@ -334,6 +515,22 @@ public static class ProjectContentBootstrap
         }
 
         EditorBuildSettings.scenes = newScenes.ToArray();
+    }
+
+    private static void EnsurePlayModeStartScene()
+    {
+        SceneAsset bootScene = AssetDatabase.LoadAssetAtPath<SceneAsset>(BootScenePath);
+        if (bootScene == null)
+        {
+            return;
+        }
+
+        if (EditorSceneManager.playModeStartScene == bootScene)
+        {
+            return;
+        }
+
+        EditorSceneManager.playModeStartScene = bootScene;
     }
 
     private static void AddScriptComponent(GameObject target, string scriptPath)

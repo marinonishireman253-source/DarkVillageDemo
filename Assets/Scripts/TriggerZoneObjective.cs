@@ -35,6 +35,16 @@ public class TriggerZoneObjective : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
+        TryComplete(other);
+    }
+
+    private void OnTriggerStay(Collider other)
+    {
+        TryComplete(other);
+    }
+
+    private void TryComplete(Collider other)
+    {
         if (_triggered && triggerOnce)
         {
             return;

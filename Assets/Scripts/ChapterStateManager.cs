@@ -43,7 +43,13 @@ public class ChapterState : ScriptableObject
 
     public static void SetFlag(string flagId, bool value)
     {
+        if (string.IsNullOrWhiteSpace(flagId))
+        {
+            return;
+        }
+
         _runtimeFlags[flagId] = value;
+        SaveSystem.MarkDirty();
     }
 
     public static bool GetFlag(string flagId)
@@ -56,6 +62,7 @@ public class ChapterState : ScriptableObject
         if (!string.IsNullOrWhiteSpace(itemId))
         {
             _runtimeCollected.Add(itemId);
+            SaveSystem.MarkDirty();
         }
     }
 
@@ -68,5 +75,50 @@ public class ChapterState : ScriptableObject
     {
         _runtimeFlags.Clear();
         _runtimeCollected.Clear();
+        SaveSystem.MarkDirty();
+    }
+
+    public static Dictionary<string, bool> GetRuntimeFlagsSnapshot()
+    {
+        return new Dictionary<string, bool>(_runtimeFlags);
+    }
+
+    public static string[] GetCollectedItemsSnapshot()
+    {
+        string[] result = new string[_runtimeCollected.Count];
+        _runtimeCollected.CopyTo(result);
+        return result;
+    }
+
+    public static void RestoreRuntimeState(Dictionary<string, bool> flags, IEnumerable<string> collectedItems)
+    {
+        _runtimeFlags.Clear();
+        _runtimeCollected.Clear();
+
+        if (flags != null)
+        {
+            foreach (KeyValuePair<string, bool> entry in flags)
+            {
+                if (string.IsNullOrWhiteSpace(entry.Key))
+                {
+                    continue;
+                }
+
+                _runtimeFlags[entry.Key] = entry.Value;
+            }
+        }
+
+        if (collectedItems != null)
+        {
+            foreach (string itemId in collectedItems)
+            {
+                if (string.IsNullOrWhiteSpace(itemId))
+                {
+                    continue;
+                }
+
+                _runtimeCollected.Add(itemId);
+            }
+        }
     }
 }

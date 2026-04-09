@@ -37,6 +37,7 @@ public class QuestTracker : MonoBehaviour
         CurrentMarkerText = string.IsNullOrWhiteSpace(markerText) ? "目标" : markerText.Trim();
         CurrentTarget = target;
         IsCompleted = false;
+        SaveSystem.MarkDirty();
     }
 
     public bool CompleteObjective(string objectiveId)
@@ -66,6 +67,17 @@ public class QuestTracker : MonoBehaviour
 
         CurrentObjectiveText = baseText;
         CurrentTarget = null;
+        SaveSystem.MarkDirty();
         return true;
+    }
+
+    public void ClearObjective()
+    {
+        CurrentObjectiveId = string.Empty;
+        CurrentObjectiveText = string.Empty;
+        CurrentMarkerText = "目标";
+        CurrentTarget = null;
+        IsCompleted = false;
+        SaveSystem.MarkDirty();
     }
 }

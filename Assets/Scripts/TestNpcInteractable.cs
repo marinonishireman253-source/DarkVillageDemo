@@ -24,48 +24,42 @@ public class TestNpcInteractable : InteractableBase
             text = "要是你准备继续往前走，记得沿着灯火最弱的那条路。"
         }
     };
-
-    [Header("Focus Feedback")]
-    [SerializeField] private Renderer highlightRenderer;
-    [SerializeField] private Color idleColor = new Color(0.78f, 0.8f, 0.82f);
-    [SerializeField] private Color focusColor = new Color(0.97f, 0.83f, 0.58f);
-
-    private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
-    private static readonly int ColorId = Shader.PropertyToID("_Color");
-
     public DialogueData DialogueData => dialogueData;
     public override string DisplayName => dialogueData != null && !string.IsNullOrWhiteSpace(dialogueData.SpeakerName)
         ? dialogueData.SpeakerName
         : base.DisplayName;
 
-    private MaterialPropertyBlock _propertyBlock;
-    private bool _supportsBaseColor;
-    private bool _supportsColor;
-
     private void Reset()
     {
         ApplyPromptDefaults();
-
-        if (highlightRenderer == null)
-        {
-            highlightRenderer = GetComponentInChildren<Renderer>();
-        }
-
         EnsureCollider();
     }
 
     private void Awake()
     {
         ApplyPromptDefaults();
+        EnsureCollider();
+    }
 
-        if (highlightRenderer == null)
+    public void ConfigureFallbackDialogue(params string[] lines)
+    {
+        if (lines == null || lines.Length == 0)
         {
-            highlightRenderer = GetComponentInChildren<Renderer>();
+            return;
         }
 
-        EnsureCollider();
-        CacheColorSupport();
-        ApplyColor(idleColor);
+        dialogueData = null;
+        dialogueLines = new DialogueLine[lines.Length];
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            dialogueLines[i] = new DialogueLine
+            {
+                text = lines[i]
+            };
+        }
+
+        ApplyPromptDefaults();
     }
 
     public override void Interact(PlayerMover player)
@@ -91,12 +85,12 @@ public class TestNpcInteractable : InteractableBase
 
     public override void OnFocusGained(PlayerMover player)
     {
-        ApplyColor(focusColor);
+        base.OnFocusGained(player);
     }
 
     public override void OnFocusLost(PlayerMover player)
     {
-        ApplyColor(idleColor);
+        base.OnFocusLost(player);
     }
 
     private void ApplyPromptDefaults()
@@ -157,42 +151,4 @@ public class TestNpcInteractable : InteractableBase
         capsuleCollider.radius = 0.35f;
     }
 
-    private void CacheColorSupport()
-    {
-        if (highlightRenderer == null || highlightRenderer.sharedMaterial == null)
-        {
-            return;
-        }
-
-        _propertyBlock = new MaterialPropertyBlock();
-        _supportsBaseColor = highlightRenderer.sharedMaterial.HasProperty(BaseColorId);
-        _supportsColor = highlightRenderer.sharedMaterial.HasProperty(ColorId);
-    }
-
-    private void ApplyColor(Color color)
-    {
-        if (highlightRenderer == null || (!_supportsBaseColor && !_supportsColor))
-        {
-            return;
-        }
-
-        if (_propertyBlock == null)
-        {
-            _propertyBlock = new MaterialPropertyBlock();
-        }
-
-        _propertyBlock.Clear();
-
-        if (_supportsBaseColor)
-        {
-            _propertyBlock.SetColor(BaseColorId, color);
-        }
-
-        if (_supportsColor)
-        {
-            _propertyBlock.SetColor(ColorId, color);
-        }
-
-        highlightRenderer.SetPropertyBlock(_propertyBlock);
-    }
 }

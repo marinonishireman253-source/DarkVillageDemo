@@ -20,6 +20,7 @@ public class SimpleDialogueUI : MonoBehaviour
     private GUIStyle _nameStyle;
     private GUIStyle _bodyStyle;
     private GUIStyle _hintStyle;
+    private Vector2 _bodyScroll;
 
     private void Awake()
     {
@@ -112,7 +113,7 @@ public class SimpleDialogueUI : MonoBehaviour
         _currentLineIndex = 0;
         _isOpen = true;
         _openedFrame = Time.frameCount;
-        Debug.Log("[SimpleDialogueUI] Show dialogue");
+        _bodyScroll = Vector2.zero;
     }
 
     public void Hide()
@@ -122,7 +123,7 @@ public class SimpleDialogueUI : MonoBehaviour
         _lines.Clear();
         _currentLineIndex = 0;
         _openedFrame = -1;
-        Debug.Log("[SimpleDialogueUI] Hide dialogue");
+        _bodyScroll = Vector2.zero;
     }
 
     private void OnGUI()
@@ -134,8 +135,11 @@ public class SimpleDialogueUI : MonoBehaviour
 
         EnsureStyles();
 
-        float width = Mathf.Min(Screen.width * 0.84f, 920f);
-        float height = Mathf.Clamp(Screen.height * 0.24f, 180f, 250f);
+        float width = Mathf.Min(Screen.width * 0.86f, 960f);
+        float contentWidth = width - 56f;
+        float textHeight = _bodyStyle.CalcHeight(new GUIContent(CurrentLine), contentWidth - 18f);
+        float bodyViewportHeight = Mathf.Clamp(textHeight, 96f, Screen.height * 0.26f);
+        float height = Mathf.Clamp(bodyViewportHeight + 96f, 190f, Screen.height * 0.42f);
         float x = (Screen.width - width) * 0.5f;
         float y = Screen.height - height - 24f;
 
@@ -153,8 +157,11 @@ public class SimpleDialogueUI : MonoBehaviour
         }
 
         float contentX = x + 28f;
-        float contentWidth = width - 56f;
-        GUI.Label(new Rect(contentX, y + 28f, contentWidth, height - 82f), CurrentLine, _bodyStyle);
+        Rect bodyViewport = new Rect(contentX, y + 28f, contentWidth, height - 82f);
+        Rect bodyContent = new Rect(0f, 0f, contentWidth - 18f, textHeight + 10f);
+        _bodyScroll = GUI.BeginScrollView(bodyViewport, _bodyScroll, bodyContent, false, textHeight > bodyViewport.height);
+        GUI.Label(new Rect(0f, 0f, bodyContent.width, bodyContent.height), CurrentLine, _bodyStyle);
+        GUI.EndScrollView();
 
         string hintText = HasMoreLines
             ? $"E / Enter / Space 继续    Esc 关闭    {_currentLineIndex + 1}/{_lines.Count}"

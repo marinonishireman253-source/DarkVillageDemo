@@ -13,14 +13,6 @@ public class DialogueInteractable : InteractableBase
     [Header("立绘匹配（可选）")]
     [SerializeField] private string characterId;
 
-    [Header("焦点反馈")]
-    [SerializeField] private Renderer highlightRenderer;
-    [SerializeField] private Color idleColor = new Color(0.78f, 0.8f, 0.82f);
-    [SerializeField] private Color focusColor = new Color(0.97f, 0.83f, 0.58f);
-
-    private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
-    private static readonly int ColorId = Shader.PropertyToID("_Color");
-
     public override string DisplayName
     {
         get
@@ -32,30 +24,15 @@ public class DialogueInteractable : InteractableBase
             return base.DisplayName;
         }
     }
-
-    private MaterialPropertyBlock _propertyBlock;
-    private bool _supportsBaseColor;
-    private bool _supportsColor;
-
     private void Reset()
     {
-        if (highlightRenderer == null)
-        {
-            highlightRenderer = GetComponentInChildren<Renderer>();
-        }
         EnsureCollider();
     }
 
     private void Awake()
     {
         ApplyPromptDefaults();
-        if (highlightRenderer == null)
-        {
-            highlightRenderer = GetComponentInChildren<Renderer>();
-        }
         EnsureCollider();
-        CacheColorSupport();
-        ApplyColor(idleColor);
     }
 
     public override void Interact(PlayerMover player)
@@ -82,12 +59,12 @@ public class DialogueInteractable : InteractableBase
 
     public override void OnFocusGained(PlayerMover player)
     {
-        ApplyColor(focusColor);
+        base.OnFocusGained(player);
     }
 
     public override void OnFocusLost(PlayerMover player)
     {
-        ApplyColor(idleColor);
+        base.OnFocusLost(player);
     }
 
     private void ApplyPromptDefaults()
@@ -114,30 +91,4 @@ public class DialogueInteractable : InteractableBase
         cc.radius = 0.35f;
     }
 
-    private void CacheColorSupport()
-    {
-        if (highlightRenderer == null || highlightRenderer.sharedMaterial == null)
-        {
-            return;
-        }
-        _propertyBlock = new MaterialPropertyBlock();
-        _supportsBaseColor = highlightRenderer.sharedMaterial.HasProperty(BaseColorId);
-        _supportsColor = highlightRenderer.sharedMaterial.HasProperty(ColorId);
-    }
-
-    private void ApplyColor(Color color)
-    {
-        if (highlightRenderer == null || (!_supportsBaseColor && !_supportsColor))
-        {
-            return;
-        }
-        if (_propertyBlock == null)
-        {
-            _propertyBlock = new MaterialPropertyBlock();
-        }
-        _propertyBlock.Clear();
-        if (_supportsBaseColor) _propertyBlock.SetColor(BaseColorId, color);
-        if (_supportsColor) _propertyBlock.SetColor(ColorId, color);
-        highlightRenderer.SetPropertyBlock(_propertyBlock);
-    }
 }

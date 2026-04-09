@@ -1,50 +1,173 @@
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.SceneManagement;
+using System.Collections;
 
 public class GameBootstrap : MonoBehaviour
 {
+    private static GameBootstrap s_Instance;
+
+    private readonly struct CameraProfile
+    {
+        public CameraProfile(Vector3 offset, Vector3 lookOffset, Vector3 eulerAngles, float fieldOfView)
+        {
+            Offset = offset;
+            LookOffset = lookOffset;
+            EulerAngles = eulerAngles;
+            FieldOfView = fieldOfView;
+        }
+
+        public Vector3 Offset { get; }
+        public Vector3 LookOffset { get; }
+        public Vector3 EulerAngles { get; }
+        public float FieldOfView { get; }
+    }
+
     private static readonly Vector3 DefaultPlayerSpawnPosition = new Vector3(0f, 1f, 0f);
-    private static readonly Vector3 DefaultCameraOffset = new Vector3(-7f, 8f, -7f);
-    private static readonly Vector3 DefaultCameraLookOffset = new Vector3(0f, 0.5f, 0f);
-    private static readonly Vector3 DefaultCameraEulerAngles = new Vector3(42f, 45f, 0f);
+    private static readonly CameraProfile ExplorationCameraProfile = new CameraProfile(new Vector3(-7f, 8f, -7f), new Vector3(0f, 0.6f, 0f), new Vector3(42f, 45f, 0f), 50f);
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Bootstrap()
     {
-        GameObject existing = GameObject.Find("__RuntimeBootstrap");
-        if (existing != null)
+        if (s_Instance != null)
         {
             return;
         }
 
         GameObject root = new GameObject("__RuntimeBootstrap");
-        root.AddComponent<GameBootstrap>();
+        DontDestroyOnLoad(root);
+        s_Instance = root.AddComponent<GameBootstrap>();
+    }
+
+    private void Awake()
+    {
+        if (s_Instance != null && s_Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        s_Instance = this;
+        DontDestroyOnLoad(gameObject);
+    }
+
+    private void OnEnable()
+    {
+        SceneManager.sceneLoaded += OnSceneLoaded;
+    }
+
+    private void OnDisable()
+    {
+        SceneManager.sceneLoaded -= OnSceneLoaded;
     }
 
     private void Start()
+    {
+        RunSceneBootstrap();
+    }
+
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        RunSceneBootstrap();
+    }
+
+    private void RunSceneBootstrap()
     {
         if (!IsExplorationScene())
         {
             return;
         }
 
-        EnsureCoreWorld();
+        EnsureGround();
+        PlayerMover player = EnsurePlayer();
         EnsureSystems();
         EnsureUi();
+        EnsureSceneSlice(player);
+        EnsureCamera(player);
         EnsureFallbackInteractables();
+        EnsureQuestFlow();
+        StartCoroutine(FinalizeSceneSetupNextFrame(player));
+    }
+
+    private IEnumerator FinalizeSceneSetupNextFrame(PlayerMover initialPlayer)
+    {
+        yield return null;
+
+        if (!IsExplorationScene())
+        {
+            yield break;
+        }
+
+        PlayerMover player = initialPlayer != null ? initialPlayer : FindFirstObjectByType<PlayerMover>();
+        if (player == null)
+        {
+            yield break;
+        }
+
+        EnsureSceneSlice(player);
+        EnsureCamera(player);
         EnsureQuestFlow();
     }
 
-    private void EnsureCoreWorld()
+    private void EnsureSceneSlice(PlayerMover player)
     {
-        EnsureGround();
-        PlayerMover player = EnsurePlayer();
-        EnsureCamera(player);
+        if (player == null)
+        {
+            return;
+        }
+
+        Scene activeScene = SceneManager.GetActiveScene();
+
+        if (IsPrologueStreetScene(activeScene))
+        {
+            PrologueStreetSlice.Ensure(player);
+            Chapter01WorldMap.Ensure(player);
+            return;
+        }
+
+        if (activeScene.name == SceneLoader.PrologueEventRoomSceneName)
+        {
+            PrologueEventRoomSlice.Ensure(player);
+            return;
+        }
+
+        if (activeScene.name == SceneLoader.VfxTestBenchSceneName)
+        {
+            VfxTestBenchSlice.Ensure(player);
+            return;
+        }
+
+        if (activeScene.name == SceneLoader.Chapter01RedCreekEntranceSceneName)
+        {
+            Chapter01RedCreekEntranceSlice.Ensure(player);
+            return;
+        }
+
+        if (activeScene.name == SceneLoader.Chapter01RedCreekCoreSceneName)
+        {
+            Chapter01RedCreekCoreSlice.Ensure(player);
+            return;
+        }
+
+        if (activeScene.name == SceneLoader.Chapter01BossHouseSceneName)
+        {
+            Chapter01BossHouseSlice.Ensure(player);
+            return;
+        }
+
+        if (activeScene.name == SceneLoader.Chapter01EndSceneName)
+        {
+            Chapter01EndSlice.Ensure(player);
+        }
     }
 
     private void EnsureGround()
     {
+        if (SceneProvidesOwnGround())
+        {
+            return;
+        }
+
         if (HasWalkableGround())
         {
             return;
@@ -56,18 +179,34 @@ public class GameBootstrap : MonoBehaviour
         ground.transform.localScale = new Vector3(4f, 1f, 4f);
     }
 
+    private bool SceneProvidesOwnGround()
+    {
+        Scene activeScene = SceneManager.GetActiveScene();
+        return activeScene.name == SceneLoader.PrologueEventRoomSceneName
+            || activeScene.name == SceneLoader.VfxTestBenchSceneName
+            || activeScene.name == SceneLoader.Chapter01RedCreekEntranceSceneName
+            || activeScene.name == SceneLoader.Chapter01RedCreekCoreSceneName
+            || activeScene.name == SceneLoader.Chapter01BossHouseSceneName
+            || activeScene.name == SceneLoader.Chapter01EndSceneName;
+    }
+
     private PlayerMover EnsurePlayer()
     {
         PlayerMover existingPlayer = FindFirstObjectByType<PlayerMover>();
         if (existingPlayer != null)
         {
+            EnsurePlayerCombat(existingPlayer.gameObject);
+            EnsurePlayerVisual(existingPlayer.gameObject);
             return existingPlayer;
         }
 
         GameObject player = GameObject.CreatePrimitive(PrimitiveType.Capsule);
         player.name = "Player";
         player.transform.position = DefaultPlayerSpawnPosition;
-        return player.AddComponent<PlayerMover>();
+        PlayerMover mover = player.AddComponent<PlayerMover>();
+        EnsurePlayerCombat(player);
+        EnsurePlayerVisual(player);
+        return mover;
     }
 
     private void EnsureCamera(PlayerMover player)
@@ -108,9 +247,9 @@ public class GameBootstrap : MonoBehaviour
             cameraRoot.AddComponent<UniversalAdditionalCameraData>();
         }
 
+        mainCamera.enabled = true;
         mainCamera.orthographic = false;
-        mainCamera.fieldOfView = 50f;
-        mainCamera.transform.position = player.transform.position + DefaultCameraOffset;
+        mainCamera.fieldOfView = ExplorationCameraProfile.FieldOfView;
 
         CameraFollow follow = cameraRoot.GetComponent<CameraFollow>();
         if (follow == null)
@@ -118,8 +257,7 @@ public class GameBootstrap : MonoBehaviour
             follow = cameraRoot.AddComponent<CameraFollow>();
         }
 
-        follow.Configure(DefaultCameraOffset, false, DefaultCameraLookOffset, DefaultCameraEulerAngles);
-
+        follow.Configure(ExplorationCameraProfile.Offset, false, ExplorationCameraProfile.LookOffset, ExplorationCameraProfile.EulerAngles);
         follow.SetTarget(player.transform, true);
     }
 
@@ -146,6 +284,16 @@ public class GameBootstrap : MonoBehaviour
         if (FindFirstObjectByType<QuestTrackerUI>() == null)
         {
             new GameObject("QuestTrackerUI").AddComponent<QuestTrackerUI>();
+        }
+
+        if (FindFirstObjectByType<ChapterCompleteOverlay>() == null)
+        {
+            new GameObject("ChapterCompleteOverlay").AddComponent<ChapterCompleteOverlay>();
+        }
+
+        if (FindFirstObjectByType<CombatHud>() == null)
+        {
+            new GameObject("CombatHud").AddComponent<CombatHud>();
         }
 
         // M2: 对话系统
@@ -236,6 +384,12 @@ public class GameBootstrap : MonoBehaviour
 
     private void EnsureQuestFlow()
     {
+        if (SceneManager.GetActiveScene().name == SceneLoader.VfxTestBenchSceneName)
+        {
+            QuestTracker.Instance?.ClearObjective();
+            return;
+        }
+
         TestNpcInteractable npc = FindFirstObjectByType<TestNpcInteractable>();
         TestStoneInteractable stone = FindFirstObjectByType<TestStoneInteractable>();
         PickupInteractable pickup = FindFirstObjectByType<PickupInteractable>();
@@ -381,5 +535,62 @@ public class GameBootstrap : MonoBehaviour
     {
         string sceneName = SceneManager.GetActiveScene().name;
         return sceneName != SceneLoader.BootSceneName && sceneName != SceneLoader.TitleSceneName;
+    }
+
+    private bool IsPrologueStreetScene(Scene scene)
+    {
+        if (scene.name == SceneLoader.MainSceneName)
+        {
+            return true;
+        }
+
+        return scene.path == SceneLoader.MainScenePath;
+    }
+
+    private void EnsurePlayerCombat(GameObject playerObject)
+    {
+        if (playerObject == null)
+        {
+            return;
+        }
+
+        if (playerObject.GetComponent<CombatantHealth>() == null)
+        {
+            playerObject.AddComponent<CombatantHealth>();
+        }
+
+        if (playerObject.GetComponent<PlayerCombat>() == null)
+        {
+            playerObject.AddComponent<PlayerCombat>();
+        }
+
+        Rigidbody body = playerObject.GetComponent<Rigidbody>();
+        if (body == null)
+        {
+            body = playerObject.AddComponent<Rigidbody>();
+        }
+
+        body.useGravity = false;
+        body.isKinematic = true;
+        body.constraints = RigidbodyConstraints.FreezeRotation;
+    }
+
+    private void EnsurePlayerVisual(GameObject playerObject)
+    {
+        if (playerObject == null)
+        {
+            return;
+        }
+
+        PlayerCharacterVisual legacyVisual = playerObject.GetComponent<PlayerCharacterVisual>();
+        if (legacyVisual != null)
+        {
+            Destroy(legacyVisual);
+        }
+
+        if (playerObject.GetComponent<PlayerSpriteVisual>() == null)
+        {
+            playerObject.AddComponent<PlayerSpriteVisual>();
+        }
     }
 }

@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 
 public class DoorInteractable : InteractableBase
@@ -7,9 +8,11 @@ public class DoorInteractable : InteractableBase
     [SerializeField] private Vector3 openedEulerAngles = new Vector3(0f, 90f, 0f);
     [SerializeField] private bool startsOpened;
     [SerializeField] private bool lockAfterOpen;
+    [SerializeField] private float openDuration = 0.18f;
 
     private bool _isOpen;
     private bool _isLocked;
+    private Coroutine _doorAnimation;
 
     private void Awake()
     {
@@ -35,17 +38,22 @@ public class DoorInteractable : InteractableBase
             return;
         }
 
-        _isOpen = !_isOpen;
-        ApplyVisual();
-        RefreshPrompt();
+        bool targetOpen = lockAfterOpen ? true : !_isOpen;
+        if (targetOpen == _isOpen)
+        {
+            return;
+        }
+
+        SetDoorState(targetOpen);
 
         if (_isOpen && lockAfterOpen)
         {
             _isLocked = true;
-            promptText = "已开启";
         }
 
-        if (TryGetComponent(out QuestObjectiveTarget objectiveTarget))
+        RefreshPrompt();
+
+        if (_isOpen && TryGetComponent(out QuestObjectiveTarget objectiveTarget))
         {
             objectiveTarget.NotifyInteracted();
         }
@@ -54,6 +62,14 @@ public class DoorInteractable : InteractableBase
     public void SetDoorVisual(Transform target)
     {
         doorVisual = target;
+        ApplyVisual();
+    }
+
+    public void ConfigureMotion(Vector3 openedAngles, bool shouldLockAfterOpen)
+    {
+        openedEulerAngles = openedAngles;
+        lockAfterOpen = shouldLockAfterOpen;
+        RefreshPrompt();
         ApplyVisual();
     }
 
@@ -67,14 +83,56 @@ public class DoorInteractable : InteractableBase
         doorVisual.localEulerAngles = _isOpen ? openedEulerAngles : closedEulerAngles;
     }
 
+    private void SetDoorState(bool isOpen)
+    {
+        _isOpen = isOpen;
+
+        if (doorVisual == null)
+        {
+            return;
+        }
+
+        if (_doorAnimation != null)
+        {
+            StopCoroutine(_doorAnimation);
+        }
+
+        if (!isActiveAndEnabled || openDuration <= 0.01f)
+        {
+            ApplyVisual();
+            return;
+        }
+
+        Vector3 targetEulerAngles = _isOpen ? openedEulerAngles : closedEulerAngles;
+        _doorAnimation = StartCoroutine(AnimateDoor(targetEulerAngles));
+    }
+
+    private IEnumerator AnimateDoor(Vector3 targetEulerAngles)
+    {
+        Quaternion startRotation = doorVisual.localRotation;
+        Quaternion targetRotation = Quaternion.Euler(targetEulerAngles);
+        float elapsed = 0f;
+
+        while (elapsed < openDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / openDuration);
+            doorVisual.localRotation = Quaternion.Slerp(startRotation, targetRotation, t);
+            yield return null;
+        }
+
+        doorVisual.localRotation = targetRotation;
+        _doorAnimation = null;
+    }
+
     private void RefreshPrompt()
     {
         if (_isLocked)
         {
-            promptText = "已开启";
+            promptText = "通过";
             return;
         }
 
-        promptText = _isOpen ? "关闭" : "开启";
+        promptText = _isOpen ? "关闭" : "推门";
     }
 }

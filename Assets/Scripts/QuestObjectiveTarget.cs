@@ -48,6 +48,7 @@ public class QuestObjectiveTarget : MonoBehaviour
 
         QuestTracker.Instance.SetObjective(objectiveId, objectiveText, transform, markerText);
         _pendingAutoRegister = false;
+        TryResolveImmediateCompletion();
     }
 
     public void NotifyInteracted()
@@ -90,7 +91,30 @@ public class QuestObjectiveTarget : MonoBehaviour
             return;
         }
 
-        QuestTracker.Instance.SetObjective(objectiveId, objectiveText, transform, markerText);
-        _pendingAutoRegister = false;
+        RegisterAsCurrentObjective();
+    }
+
+    private void TryResolveImmediateCompletion()
+    {
+        if (!completeOnInteract || QuestTracker.Instance == null)
+        {
+            return;
+        }
+
+        if (!TryGetComponent(out PickupInteractable pickupInteractable) || !pickupInteractable.IsCollected)
+        {
+            return;
+        }
+
+        bool completed = QuestTracker.Instance.CompleteObjective(objectiveId);
+        if (!completed)
+        {
+            return;
+        }
+
+        if (nextObjective != null)
+        {
+            nextObjective.RegisterAsCurrentObjective();
+        }
     }
 }

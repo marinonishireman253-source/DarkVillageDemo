@@ -5,20 +5,32 @@ public class TestStoneInteractable : InteractableBase
     [Header("Dialogue")]
     [SerializeField] private DialogueData dialogueData;
     [SerializeField] [TextArea(2, 4)] private string fallbackDialogueText = "石碑表面刻着一行浅白色的字：\n\n‘愿仍记誓者，先于黑夜到达。’";
-    [SerializeField] private Color idleColor = new Color(0.55f, 0.55f, 0.62f);
-    [SerializeField] private Color focusColor = new Color(0.9f, 0.82f, 0.45f);
 
     public DialogueData DialogueData => dialogueData;
-
-    private Renderer _renderer;
-    private MaterialPropertyBlock _propertyBlock;
 
     private void Awake()
     {
         ApplyDefaults();
-        _renderer = GetComponentInChildren<Renderer>();
-        _propertyBlock = new MaterialPropertyBlock();
-        ApplyColor(idleColor);
+    }
+
+    public void ConfigureFallbackDialogue(string speakerName, string prompt, string text)
+    {
+        dialogueData = null;
+
+        if (!string.IsNullOrWhiteSpace(speakerName))
+        {
+            displayName = speakerName.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(prompt))
+        {
+            promptText = prompt.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            fallbackDialogueText = text.Trim();
+        }
     }
 
     public override void Interact(PlayerMover player)
@@ -46,12 +58,12 @@ public class TestStoneInteractable : InteractableBase
 
     public override void OnFocusGained(PlayerMover player)
     {
-        ApplyColor(focusColor);
+        base.OnFocusGained(player);
     }
 
     public override void OnFocusLost(PlayerMover player)
     {
-        ApplyColor(idleColor);
+        base.OnFocusLost(player);
     }
 
     private void ApplyDefaults()
@@ -78,21 +90,4 @@ public class TestStoneInteractable : InteractableBase
         }
     }
 
-    private void ApplyColor(Color color)
-    {
-        if (_renderer == null)
-        {
-            return;
-        }
-
-        if (_propertyBlock == null)
-        {
-            _propertyBlock = new MaterialPropertyBlock();
-        }
-
-        _propertyBlock.Clear();
-        _propertyBlock.SetColor("_BaseColor", color);
-        _propertyBlock.SetColor("_Color", color);
-        _renderer.SetPropertyBlock(_propertyBlock);
-    }
 }
