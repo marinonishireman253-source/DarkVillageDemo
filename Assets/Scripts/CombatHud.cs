@@ -2,17 +2,7 @@ using UnityEngine;
 
 public class CombatHud : MonoBehaviour
 {
-    private static Texture2D s_WhiteTexture;
-
     private PlayerCombat _playerCombat;
-    private GUIStyle _panelStyle;
-    private GUIStyle _titleStyle;
-    private GUIStyle _bodyStyle;
-
-    private void Awake()
-    {
-        EnsureWhiteTexture();
-    }
 
     private void Update()
     {
@@ -21,84 +11,52 @@ public class CombatHud : MonoBehaviour
             PlayerMover player = FindFirstObjectByType<PlayerMover>();
             _playerCombat = player != null ? player.GetComponent<PlayerCombat>() : null;
         }
+
+        SyncCanvasView();
     }
 
-    private void OnGUI()
+    private void OnDisable()
     {
-        EnsureWhiteTexture();
+        if (UiBootstrap.TryGetHudView(out HudCanvasView hudView))
+        {
+            hudView.HideCombatPanel();
+        }
+    }
+
+    private void SyncCanvasView()
+    {
+        if (!UiBootstrap.TryGetHudView(out HudCanvasView hudView))
+        {
+            return;
+        }
 
         if (_playerCombat == null || _playerCombat.Health == null)
         {
+            hudView.HideCombatPanel();
             return;
         }
 
-        EnsureStyles();
-
-        float x = 18f;
-        float y = 18f;
-        float width = 320f;
-        float height = CombatEncounterTrigger.ActiveEncounter != null ? 116f : 74f;
-
-        DrawRect(new Rect(x, y, width, height), new Color(0.04f, 0.05f, 0.07f, 0.76f));
-        DrawRect(new Rect(x + 3f, y + 3f, width - 6f, height - 6f), new Color(0.12f, 0.14f, 0.17f, 0.62f));
-
-        GUI.Label(new Rect(x + 14f, y + 10f, width - 28f, 24f), $"伊尔萨恩  HP {_playerCombat.Health.CurrentHealth}/{_playerCombat.Health.MaxHealth}", _titleStyle);
-        GUI.Label(new Rect(x + 14f, y + 38f, width - 28f, 24f), "攻击键: Space / J / 鼠标左键", _bodyStyle);
-
-        if (CombatEncounterTrigger.ActiveEncounter == null)
+        bool showEncounterDetails = CombatEncounterTrigger.ActiveEncounter != null;
+        if (!showEncounterDetails)
         {
+            hudView.HideCombatPanel();
             return;
         }
 
-        string enemyLine = CombatEncounterTrigger.ActiveEnemy != null && CombatEncounterTrigger.ActiveEnemy.Health != null
-            ? $"{CombatEncounterTrigger.ActiveEnemy.EnemyName}  HP {CombatEncounterTrigger.ActiveEnemy.Health.CurrentHealth}/{CombatEncounterTrigger.ActiveEnemy.Health.MaxHealth}"
-            : "敌人未锁定";
+        string playerLine = $"伊尔萨恩  HP {_playerCombat.Health.CurrentHealth}/{_playerCombat.Health.MaxHealth}";
+        string controlsLine = "攻击键: Space / J / 鼠标左键";
+        string encounterLine = showEncounterDetails
+            ? $"战斗: {CombatEncounterTrigger.ActiveEncounter.EncounterName}"
+            : string.Empty;
 
-        GUI.Label(new Rect(x + 14f, y + 64f, width - 28f, 24f), $"战斗: {CombatEncounterTrigger.ActiveEncounter.EncounterName}", _bodyStyle);
-        GUI.Label(new Rect(x + 14f, y + 88f, width - 28f, 24f), enemyLine, _bodyStyle);
-    }
-
-    private void EnsureWhiteTexture()
-    {
-        if (s_WhiteTexture != null)
+        string enemyLine = string.Empty;
+        if (showEncounterDetails)
         {
-            return;
+            enemyLine = CombatEncounterTrigger.ActiveEnemy != null && CombatEncounterTrigger.ActiveEnemy.Health != null
+                ? $"{CombatEncounterTrigger.ActiveEnemy.EnemyName}  HP {CombatEncounterTrigger.ActiveEnemy.Health.CurrentHealth}/{CombatEncounterTrigger.ActiveEnemy.Health.MaxHealth}"
+                : "敌人未锁定";
         }
 
-        s_WhiteTexture = new Texture2D(1, 1, TextureFormat.RGBA32, false)
-        {
-            hideFlags = HideFlags.HideAndDontSave
-        };
-        s_WhiteTexture.SetPixel(0, 0, Color.white);
-        s_WhiteTexture.Apply(false, true);
-    }
-
-    private void EnsureStyles()
-    {
-        if (_titleStyle != null)
-        {
-            return;
-        }
-
-        _titleStyle = new GUIStyle(GUI.skin.label)
-        {
-            fontSize = 18,
-            fontStyle = FontStyle.Bold
-        };
-        _titleStyle.normal.textColor = new Color(0.92f, 0.9f, 0.85f);
-
-        _bodyStyle = new GUIStyle(GUI.skin.label)
-        {
-            fontSize = 14
-        };
-        _bodyStyle.normal.textColor = new Color(0.78f, 0.79f, 0.8f);
-    }
-
-    private void DrawRect(Rect rect, Color color)
-    {
-        Color previousColor = GUI.color;
-        GUI.color = color;
-        GUI.DrawTexture(rect, s_WhiteTexture, ScaleMode.StretchToFill);
-        GUI.color = previousColor;
+        hudView.SetCombatPanel(true, playerLine, controlsLine, encounterLine, enemyLine, showEncounterDetails);
     }
 }

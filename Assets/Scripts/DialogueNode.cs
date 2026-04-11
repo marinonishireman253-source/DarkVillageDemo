@@ -39,6 +39,15 @@ public class DialogueChoice
     public string ChoiceText => choiceText;
     public DialogueNode NextNode => nextNode;
     public string Tag => tag;
+
+    public static DialogueChoice CreatePreview(string text, string previewTag = "")
+    {
+        return new DialogueChoice
+        {
+            choiceText = text,
+            tag = previewTag
+        };
+    }
 }
 
 [Serializable]

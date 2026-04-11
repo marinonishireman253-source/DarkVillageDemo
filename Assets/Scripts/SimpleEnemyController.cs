@@ -12,10 +12,14 @@ public class SimpleEnemyController : MonoBehaviour
     [SerializeField] private float turnSpeed = 10f;
     [SerializeField] private float attackRange = 1.15f;
     [SerializeField] private float attackCooldown = 1f;
+    [SerializeField] private float attackAnimationDuration = 0.42f;
 
     public string EnemyName => enemyName;
     public CombatantHealth Health { get; private set; }
     public bool IsAlive => Health != null && !Health.IsDead;
+    public bool IsMoving => _isMoving;
+    public float LastAttackStartedAt => _lastAttackStartedAt;
+    public float AttackAnimationDuration => attackAnimationDuration;
 
     public event System.Action<SimpleEnemyController> OnDefeated;
 
@@ -23,6 +27,8 @@ public class SimpleEnemyController : MonoBehaviour
     private PlayerCombat _playerCombat;
     private Renderer _renderer;
     private float _nextAttackTime;
+    private bool _isMoving;
+    private float _lastAttackStartedAt = float.NegativeInfinity;
 
     private void Awake()
     {
@@ -30,7 +36,12 @@ public class SimpleEnemyController : MonoBehaviour
         Health.Configure(maxHealth);
         Health.OnDied += HandleDeath;
 
-        _renderer = GetComponentInChildren<Renderer>();
+        _renderer = GetComponentInChildren<SpriteRenderer>();
+        if (_renderer == null)
+        {
+            _renderer = GetComponentInChildren<Renderer>();
+        }
+
         EnsureColliderDefaults();
     }
 
@@ -73,6 +84,7 @@ public class SimpleEnemyController : MonoBehaviour
     {
         if (!IsAlive || SimpleDialogueUI.IsOpen)
         {
+            _isMoving = false;
             return;
         }
 
@@ -84,6 +96,7 @@ public class SimpleEnemyController : MonoBehaviour
 
         if (_player == null || _playerCombat == null || _playerCombat.Health.IsDead)
         {
+            _isMoving = false;
             return;
         }
 
@@ -92,6 +105,7 @@ public class SimpleEnemyController : MonoBehaviour
 
         if (toPlayer.sqrMagnitude <= 0.001f)
         {
+            _isMoving = false;
             return;
         }
 
@@ -101,9 +115,12 @@ public class SimpleEnemyController : MonoBehaviour
         float distance = toPlayer.magnitude;
         if (distance > attackRange)
         {
+            _isMoving = true;
             transform.position += toPlayer.normalized * (moveSpeed * Time.deltaTime);
             return;
         }
+
+        _isMoving = false;
 
         if (Time.time < _nextAttackTime)
         {
@@ -111,6 +128,7 @@ public class SimpleEnemyController : MonoBehaviour
         }
 
         _nextAttackTime = Time.time + attackCooldown;
+        _lastAttackStartedAt = Time.time;
         _playerCombat.Health.TakeDamage(contactDamage);
     }
 
@@ -128,9 +146,9 @@ public class SimpleEnemyController : MonoBehaviour
     private void EnsureColliderDefaults()
     {
         CapsuleCollider colliderComponent = GetComponent<CapsuleCollider>();
-        colliderComponent.center = new Vector3(0f, 1f, 0f);
-        colliderComponent.height = 2f;
-        colliderComponent.radius = 0.38f;
+        colliderComponent.center = new Vector3(0f, 0.58f, 0f);
+        colliderComponent.height = 1.16f;
+        colliderComponent.radius = 0.24f;
     }
 
     private void FlashDamageColor()

@@ -4,7 +4,7 @@ using UnityEngine;
 [CreateAssetMenu(fileName = "DialogueData", menuName = "Ersarn/Dialogue Data")]
 public class DialogueData : ScriptableObject
 {
-    [SerializeField] private string speakerName = "守夜人";
+    [SerializeField] private string speakerName = "Sagiri";
     [SerializeField] private string promptText = "交谈";
     [SerializeField] [TextArea(2, 4)] private List<string> lines = new List<string>
     {

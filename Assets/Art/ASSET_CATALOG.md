@@ -227,39 +227,6 @@ These folders are the active runtime asset library.
   `Resources/Imported/Quaternius/FantasyProps`
   `Resources/Imported/Kenney/GraveyardKit`
 
-### Prologue_EventRoom
-- Primary:
-  `Resources/Imported/Kenney/ModularDungeon/FBX`
-- Secondary:
-  `Resources/Imported/Quaternius/FantasyProps`
-  `Resources/Imported/Kenney/GraveyardKit`
-
-### Chapter01_RedCreek_Entrance
-- Primary:
-  `Resources/Imported/Quaternius/MedievalVillage`
-- Secondary:
-  `Resources/Imported/Quaternius/FantasyProps`
-
-### Chapter01_RedCreek_Core
-- Primary:
-  `Resources/Imported/Quaternius/MedievalVillage`
-- Secondary:
-  `Resources/Imported/Quaternius/FantasyProps`
-
-### Chapter01_BossHouse
-- Primary:
-  `Resources/Imported/Quaternius/MedievalVillage`
-- Secondary:
-  `Resources/Imported/Kenney/GraveyardKit`
-  `Resources/Imported/Quaternius/FantasyProps`
-
-### Chapter01_End
-- Primary:
-  `Resources/Imported/Kenney/ModularDungeon/FBX`
-- Secondary:
-  `Resources/Imported/Kenney/GraveyardKit`
-  `Resources/Imported/Quaternius/FantasyProps`
-
 ## 7. Cleanup Notes
 
 - Keep `Assets/Art/` as source storage.

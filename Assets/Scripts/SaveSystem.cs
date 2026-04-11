@@ -7,8 +7,6 @@ using UnityEngine.SceneManagement;
 
 public sealed class SaveSystem : MonoBehaviour
 {
-    private static readonly Vector3 UnifiedWorldForward = new Vector3(1f, 0f, 1f).normalized;
-    private static readonly Vector3 UnifiedWorldRight = Vector3.Cross(Vector3.up, UnifiedWorldForward).normalized;
 
     [Serializable]
     private sealed class SaveData
@@ -325,9 +323,7 @@ public sealed class SaveSystem : MonoBehaviour
 
     private bool IsExplorationScene(Scene scene)
     {
-        return scene.name != SceneLoader.BootSceneName
-            && scene.name != SceneLoader.TitleSceneName
-            && scene.name != SceneLoader.VfxTestBenchSceneName;
+        return scene.name == SceneLoader.MainSceneName || scene.path == SceneLoader.MainScenePath;
     }
 
     private bool SceneMatches(Scene scene, string sceneReference)
@@ -342,59 +338,6 @@ public sealed class SaveSystem : MonoBehaviour
             return;
         }
 
-        if (!TryGetLegacyWorldOffset(data.sceneReference, out Vector3 worldOffset))
-        {
-            return;
-        }
-
         data.sceneReference = SceneLoader.MainScenePath;
-
-        if (data.playerPosition != null && data.playerPosition.Length == 3)
-        {
-            data.playerPosition[0] += worldOffset.x;
-            data.playerPosition[1] += worldOffset.y;
-            data.playerPosition[2] += worldOffset.z;
-        }
-    }
-
-    private static bool TryGetLegacyWorldOffset(string sceneReference, out Vector3 worldOffset)
-    {
-        Vector3 eventRoomOffset = UnifiedWorldForward * 58f + UnifiedWorldRight * 18f;
-        Vector3 entranceOffset = UnifiedWorldForward * 92f + UnifiedWorldRight * 3f;
-        Vector3 coreOffset = UnifiedWorldForward * 136f + UnifiedWorldRight * 3f;
-        Vector3 bossOffset = UnifiedWorldForward * 182f + UnifiedWorldRight * 5f;
-        Vector3 endOffset = bossOffset + UnifiedWorldForward * 26f + UnifiedWorldRight * 2f;
-
-        switch (sceneReference)
-        {
-            case SceneLoader.PrologueEventRoomSceneName:
-            case SceneLoader.PrologueEventRoomScenePath:
-                worldOffset = eventRoomOffset;
-                return true;
-
-            case SceneLoader.Chapter01RedCreekEntranceSceneName:
-            case SceneLoader.Chapter01RedCreekEntranceScenePath:
-                worldOffset = entranceOffset;
-                return true;
-
-            case SceneLoader.Chapter01RedCreekCoreSceneName:
-            case SceneLoader.Chapter01RedCreekCoreScenePath:
-                worldOffset = coreOffset;
-                return true;
-
-            case SceneLoader.Chapter01BossHouseSceneName:
-            case SceneLoader.Chapter01BossHouseScenePath:
-                worldOffset = bossOffset;
-                return true;
-
-            case SceneLoader.Chapter01EndSceneName:
-            case SceneLoader.Chapter01EndScenePath:
-                worldOffset = endOffset;
-                return true;
-
-            default:
-                worldOffset = Vector3.zero;
-                return false;
-        }
     }
 }

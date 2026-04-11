@@ -5,6 +5,12 @@ using UnityEngine.InputSystem;
 [RequireComponent(typeof(Rigidbody))]
 public class PlayerMover : MonoBehaviour
 {
+    public enum MovementMode
+    {
+        GroundPlaneXZ,
+        SideScrollerX
+    }
+
     [Header("Movement")]
     [SerializeField] private float walkSpeed = 4.2f;
     [SerializeField] private float sprintSpeed = 8f;
@@ -12,6 +18,7 @@ public class PlayerMover : MonoBehaviour
     [SerializeField] private float deceleration = 20f;
     [SerializeField] private float turnSpeed = 14f;
     [SerializeField] private bool moveRelativeToCamera = true;
+    [SerializeField] private MovementMode movementMode = MovementMode.GroundPlaneXZ;
 
     [Header("Input")]
     [SerializeField] private InputActionAsset inputActions;
@@ -39,6 +46,47 @@ public class PlayerMover : MonoBehaviour
     private IInteractable _currentInteractable;
     private bool _usingFallbackInput;
     private bool _fallbackInteractRequested;
+    private float _sideScrollDepth;
+    private Vector2 _sideScrollHorizontalRange;
+    private bool _useSideScrollHorizontalRange;
+    private Vector2 _groundPlaneXRange;
+    private Vector2 _groundPlaneZRange;
+    private bool _useGroundPlaneBounds;
+
+    public void ConfigureGroundPlane()
+    {
+        movementMode = MovementMode.GroundPlaneXZ;
+        moveRelativeToCamera = true;
+        _useSideScrollHorizontalRange = false;
+        _useGroundPlaneBounds = false;
+        _currentVelocity = Vector3.zero;
+    }
+
+    public void ConfigureGroundPlane(Vector2 xRange, Vector2 zRange, bool useCameraRelativeMovement)
+    {
+        movementMode = MovementMode.GroundPlaneXZ;
+        moveRelativeToCamera = useCameraRelativeMovement;
+        _groundPlaneXRange = xRange;
+        _groundPlaneZRange = zRange;
+        _useGroundPlaneBounds = xRange.x < xRange.y && zRange.x < zRange.y;
+        _useSideScrollHorizontalRange = false;
+        _currentVelocity = Vector3.zero;
+    }
+
+    public void ConfigureSideScroller(float lockedDepth, Vector2 horizontalRange)
+    {
+        movementMode = MovementMode.SideScrollerX;
+        moveRelativeToCamera = false;
+        _sideScrollDepth = lockedDepth;
+        _sideScrollHorizontalRange = horizontalRange;
+        _useSideScrollHorizontalRange = horizontalRange.x < horizontalRange.y;
+        _useGroundPlaneBounds = false;
+        _currentVelocity = Vector3.zero;
+
+        Vector3 position = transform.position;
+        position.z = lockedDepth;
+        transform.position = position;
+    }
 
     private void OnEnable()
     {
@@ -149,7 +197,38 @@ public class PlayerMover : MonoBehaviour
 
         float rate = desiredDirection.sqrMagnitude > 0.0001f ? acceleration : deceleration;
         _currentVelocity = Vector3.MoveTowards(_currentVelocity, targetVelocity, rate * deltaTime);
+
+        if (movementMode == MovementMode.SideScrollerX)
+        {
+            Vector3 position = transform.position + Vector3.right * (_currentVelocity.x * deltaTime);
+            position.z = _sideScrollDepth;
+
+            if (_useSideScrollHorizontalRange)
+            {
+                position.x = Mathf.Clamp(position.x, _sideScrollHorizontalRange.x, _sideScrollHorizontalRange.y);
+            }
+
+            transform.position = position;
+
+            if (Mathf.Abs(_currentVelocity.x) > 0.0001f)
+            {
+                Vector3 facing = _currentVelocity.x >= 0f ? Vector3.right : Vector3.left;
+                Quaternion targetRotation = Quaternion.LookRotation(facing, Vector3.up);
+                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, turnSpeed * deltaTime);
+            }
+
+            return;
+        }
+
         transform.position += _currentVelocity * deltaTime;
+
+        if (_useGroundPlaneBounds)
+        {
+            Vector3 position = transform.position;
+            position.x = Mathf.Clamp(position.x, _groundPlaneXRange.x, _groundPlaneXRange.y);
+            position.z = Mathf.Clamp(position.z, _groundPlaneZRange.x, _groundPlaneZRange.y);
+            transform.position = position;
+        }
 
         Vector3 planarVelocity = new Vector3(_currentVelocity.x, 0f, _currentVelocity.z);
         if (planarVelocity.sqrMagnitude > 0.0001f)
@@ -171,6 +250,11 @@ public class PlayerMover : MonoBehaviour
 
     private Vector3 GetDesiredDirection()
     {
+        if (movementMode == MovementMode.SideScrollerX)
+        {
+            return new Vector3(Mathf.Clamp(_moveInput.x, -1f, 1f), 0f, 0f);
+        }
+
         Vector3 inputDirection = new Vector3(_moveInput.x, 0f, _moveInput.y);
         if (inputDirection.sqrMagnitude <= 0.0001f)
         {

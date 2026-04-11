@@ -18,7 +18,7 @@ public class CombatEncounterTrigger : MonoBehaviour
     [SerializeField] private string enemyName = "仪式回响";
     [SerializeField] private int enemyHealth = 3;
     [SerializeField] private int enemyDamage = 1;
-    [SerializeField] private Vector3 enemySpawnOffset = new Vector3(0f, 1f, 1.9f);
+    [SerializeField] private Vector3 enemySpawnOffset = new Vector3(0f, 1f, 0f);
 
     [Header("Dialogue")]
     [SerializeField] private string preBattleSpeaker = "残响";
@@ -240,15 +240,24 @@ public class CombatEncounterTrigger : MonoBehaviour
         GameObject enemyRoot = GameObject.CreatePrimitive(PrimitiveType.Capsule);
         enemyRoot.name = enemyName.Replace(" ", string.Empty);
         enemyRoot.transform.SetParent(transform, true);
-        enemyRoot.transform.position = transform.position + transform.rotation * enemySpawnOffset;
+        Vector3 spawnPosition = transform.position + transform.rotation * enemySpawnOffset;
+        PlayerMover player = FindFirstObjectByType<PlayerMover>();
+        if (player != null)
+        {
+            spawnPosition.z = player.transform.position.z;
+        }
+
+        enemyRoot.transform.position = spawnPosition;
         enemyRoot.transform.rotation = Quaternion.LookRotation(-transform.forward, Vector3.up);
 
-        MaterialPropertyBlock propertyBlock = new MaterialPropertyBlock();
         Renderer renderer = enemyRoot.GetComponent<Renderer>();
-        renderer.GetPropertyBlock(propertyBlock);
-        propertyBlock.SetColor("_BaseColor", new Color(0.34f, 0.08f, 0.1f));
-        propertyBlock.SetColor("_Color", new Color(0.34f, 0.08f, 0.1f));
-        renderer.SetPropertyBlock(propertyBlock);
+        if (renderer != null)
+        {
+            renderer.enabled = false;
+        }
+
+        MonsterSpriteVisual visual = enemyRoot.AddComponent<MonsterSpriteVisual>();
+        visual.Configure(1.08f, 9, new Vector3(0f, 0.01f, 0f));
 
         CombatantHealth health = enemyRoot.AddComponent<CombatantHealth>();
         health.Configure(enemyHealth);

@@ -3,7 +3,7 @@ using UnityEngine;
 public class QuestObjectiveTarget : MonoBehaviour
 {
     [SerializeField] private string objectiveId = "talk_to_watchman";
-    [SerializeField] private string objectiveText = "与守夜人交谈";
+    [SerializeField] private string objectiveText = "探索塔内";
     [SerializeField] private string markerText = "主目标";
     [SerializeField] private bool autoRegisterOnStart = true;
     [SerializeField] private bool completeOnInteract = true;

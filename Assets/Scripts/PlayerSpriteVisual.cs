@@ -50,6 +50,7 @@ public class PlayerSpriteVisual : MonoBehaviour
     private Sprite[] _backAttackSprites;
     private Transform _visualRoot;
     private SpriteRenderer _spriteRenderer;
+    private SpriteCharacterLighting _characterLighting;
     private float _baseScale = 1f;
     private float _attackStartedAt = float.NegativeInfinity;
     private FacingBucket _attackFacing = FacingBucket.Front;
@@ -111,6 +112,7 @@ public class PlayerSpriteVisual : MonoBehaviour
 
         _spriteRenderer.sortingOrder = sortingOrder;
         ApplySprite(_frontIdleSprite ?? _sideIdleSprite ?? _backIdleSprite);
+        EnsureCharacterLighting();
     }
 
     private void LoadSprites()
@@ -162,11 +164,14 @@ public class PlayerSpriteVisual : MonoBehaviour
             return;
         }
 
-        _visualRoot.position = transform.position + localOffset;
-        _visualRoot.forward = mainCamera.transform.forward;
-
         Vector3 cameraForward = Vector3.ProjectOnPlane(mainCamera.transform.forward, Vector3.up);
         Vector3 cameraRight = Vector3.ProjectOnPlane(mainCamera.transform.right, Vector3.up);
+        _visualRoot.position = transform.position + localOffset;
+        if (cameraForward.sqrMagnitude > 0.0001f)
+        {
+            _visualRoot.forward = cameraForward.normalized;
+        }
+
         Vector3 facing = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
         Vector3 planarVelocity = _playerMover != null ? _playerMover.Velocity : Vector3.zero;
         planarVelocity.y = 0f;
@@ -182,6 +187,7 @@ public class PlayerSpriteVisual : MonoBehaviour
         if (attackElapsed >= 0f)
         {
             ApplyAttackVisual(moveBlend, attackElapsed, attackBlend);
+            _characterLighting?.ApplyFrame(_spriteRenderer, _visualRoot, desiredHeight, moveBlend, attackBlend);
             return;
         }
 
@@ -190,6 +196,7 @@ public class PlayerSpriteVisual : MonoBehaviour
             ApplySprite(SelectLoopSprite(_frontIdleSprite, _frontWalkSprites, isWalking, frontWalkAnimationFps));
             _spriteRenderer.flipX = false;
             ApplyMotion(moveBlend, Time.time * frontWalkAnimationFps * Mathf.PI, attackBlend, 0f, 0f);
+            _characterLighting?.ApplyFrame(_spriteRenderer, _visualRoot, desiredHeight, moveBlend, attackBlend);
             return;
         }
 
@@ -203,6 +210,7 @@ public class PlayerSpriteVisual : MonoBehaviour
             ApplySprite(SelectLoopSprite(_frontIdleSprite, _frontWalkSprites, isWalking, frontWalkAnimationFps));
             _spriteRenderer.flipX = false;
             ApplyMotion(moveBlend, Time.time * frontWalkAnimationFps * Mathf.PI, attackBlend, 0f, -forwardDot);
+            _characterLighting?.ApplyFrame(_spriteRenderer, _visualRoot, desiredHeight, moveBlend, attackBlend);
             return;
         }
 
@@ -211,6 +219,7 @@ public class PlayerSpriteVisual : MonoBehaviour
             ApplySprite(SelectLoopSprite(_backIdleSprite, _backWalkSprites, isWalking, backWalkAnimationFps));
             _spriteRenderer.flipX = false;
             ApplyMotion(moveBlend, Time.time * backWalkAnimationFps * Mathf.PI, attackBlend, 0f, forwardDot);
+            _characterLighting?.ApplyFrame(_spriteRenderer, _visualRoot, desiredHeight, moveBlend, attackBlend);
             return;
         }
 
@@ -218,6 +227,7 @@ public class PlayerSpriteVisual : MonoBehaviour
         float rightDot = Vector3.Dot(facing, cameraRight);
         _spriteRenderer.flipX = rightDot < 0f;
         ApplyMotion(moveBlend, Time.time * sideWalkAnimationFps * Mathf.PI, attackBlend, rightDot, 0f);
+        _characterLighting?.ApplyFrame(_spriteRenderer, _visualRoot, desiredHeight, moveBlend, attackBlend);
     }
 
     private void ApplyAttackVisual(float moveBlend, float attackElapsed, float attackBlend)
@@ -352,7 +362,7 @@ public class PlayerSpriteVisual : MonoBehaviour
 
         float bob = Mathf.Sin(cycle * 2f) * walkBobHeight * moveBlend;
         float breathe = Mathf.Sin(Time.time * 1.8f) * idleBreathAmount * (1f - moveBlend);
-        float yOffset = bob + breathe;
+        float yOffset = Mathf.Max(0f, bob + breathe);
 
         float squash = Mathf.Abs(Mathf.Sin(cycle * 2f)) * walkSquashAmount * moveBlend;
         float attackStretch = attackStretchAmount * attackBlend;
@@ -373,13 +383,28 @@ public class PlayerSpriteVisual : MonoBehaviour
         }
 
         Vector3 lungeOffset = lungeDirection * (attackLungeDistance * attackBlend);
+        Quaternion billboardRotation = GetUprightBillboardRotation(Camera.main);
 
         _visualRoot.position = transform.position + localOffset + new Vector3(0f, yOffset, 0f) + lungeOffset;
         _visualRoot.localScale = new Vector3(scaleX, scaleY, 1f);
-        _visualRoot.rotation = Camera.main != null
-            ? Quaternion.LookRotation(Camera.main.transform.forward, Vector3.up) * Quaternion.Euler(xTilt, 0f, zTilt)
-            : Quaternion.Euler(xTilt, 0f, zTilt);
+        _visualRoot.rotation = billboardRotation * Quaternion.Euler(xTilt, 0f, zTilt);
         _spriteRenderer.color = Color.Lerp(Color.white, attackTint, attackBlend * 0.6f);
+    }
+
+    private static Quaternion GetUprightBillboardRotation(Camera mainCamera)
+    {
+        if (mainCamera == null)
+        {
+            return Quaternion.identity;
+        }
+
+        Vector3 cameraForward = Vector3.ProjectOnPlane(mainCamera.transform.forward, Vector3.up);
+        if (cameraForward.sqrMagnitude <= 0.0001f)
+        {
+            return Quaternion.identity;
+        }
+
+        return Quaternion.LookRotation(cameraForward.normalized, Vector3.up);
     }
 
     private float GetAttackElapsed(float attackDuration)
@@ -502,6 +527,19 @@ public class PlayerSpriteVisual : MonoBehaviour
         GameObject root = new GameObject(VisualRootName);
         root.transform.SetParent(transform, false);
         return root.transform;
+    }
+
+    private void EnsureCharacterLighting()
+    {
+        if (_characterLighting == null)
+        {
+            _characterLighting = GetComponent<SpriteCharacterLighting>();
+        }
+
+        if (_characterLighting == null)
+        {
+            _characterLighting = gameObject.AddComponent<SpriteCharacterLighting>();
+        }
     }
 
     private void DisableLegacyMesh()
