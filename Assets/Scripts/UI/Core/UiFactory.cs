@@ -1,31 +1,22 @@
-using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
 public static class UiFactory
 {
+    private const float ReferenceWidth = 1920f;
+    private const float ReferenceHeight = 1080f;
+    private const float MinimumUiScale = 0.75f;
+    private const float UiScaleStep = 0.25f;
+    private const int MinimumAcceptedSamplingPointSize = 224;
+    private const int MinimumAcceptedAtlasSize = 8192;
+    private const string DefaultBodyFontResourcePath = "Fonts/TMP/Hiragino Sans GB UI Body SDF";
+    private const string DefaultDisplayFontResourcePath = "Fonts/TMP/Hiragino Sans GB UI Display SDF";
+
     private static Texture2D s_WhiteTexture;
     private static Sprite s_WhiteSprite;
-    private static Font s_BuiltinFont;
-    private static readonly Dictionary<int, TMP_FontAsset> s_TmpFontAssets = new Dictionary<int, TMP_FontAsset>();
-    private static readonly string[] s_PreferredSystemFonts =
-    {
-        "Source Han Serif SC",
-        "Source Han Serif CN",
-        "Noto Serif CJK SC",
-        "Songti SC",
-        "STSong",
-        "SimSun",
-        "Songti TC",
-        "PMingLiU",
-        "EB Garamond",
-        "Libre Baskerville",
-        "Baskerville",
-        "Times New Roman",
-        "Georgia",
-        "Palatino"
-    };
+    private static TMP_FontAsset s_DefaultBodyFont;
+    private static TMP_FontAsset s_DefaultDisplayFont;
 
     public static Canvas CreateLayerCanvas(Transform parent, string name, int sortingOrder)
     {
@@ -37,16 +28,27 @@ public static class UiFactory
 
         Canvas canvas = canvasObject.GetComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.pixelPerfect = true;
+        // TMP SDF text stays sharper without pixel-perfect snapping on scaled overlay canvases.
+        canvas.pixelPerfect = false;
         canvas.sortingOrder = sortingOrder;
 
-        CanvasScaler scaler = canvasObject.GetComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(1920f, 1080f);
-        scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-        scaler.matchWidthOrHeight = 0.5f;
+        ConfigureCanvasScaler(canvasObject.GetComponent<CanvasScaler>());
 
         return canvas;
+    }
+
+    public static void ConfigureCanvasScaler(CanvasScaler scaler)
+    {
+        if (scaler == null)
+        {
+            return;
+        }
+
+        scaler.referenceResolution = new Vector2(ReferenceWidth, ReferenceHeight);
+        scaler.referencePixelsPerUnit = 100f;
+        scaler.dynamicPixelsPerUnit = 2f;
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ConstantPixelSize;
+        scaler.scaleFactor = ComputeQuantizedScaleFactor();
     }
 
     public static RectTransform CreateRect(
@@ -65,8 +67,8 @@ public static class UiFactory
         rectTransform.anchorMin = anchorMin;
         rectTransform.anchorMax = anchorMax;
         rectTransform.pivot = pivot;
-        rectTransform.sizeDelta = sizeDelta;
-        rectTransform.anchoredPosition = anchoredPosition;
+        rectTransform.sizeDelta = RoundVector(sizeDelta);
+        rectTransform.anchoredPosition = RoundVector(anchoredPosition);
         rectTransform.localScale = Vector3.one;
         return rectTransform;
     }
@@ -109,7 +111,7 @@ public static class UiFactory
         Vector2 pivot,
         Vector2 sizeDelta,
         Vector2 anchoredPosition,
-        Font font,
+        TMP_FontAsset font,
         int fontSize,
         FontStyle fontStyle,
         TextAnchor alignment,
@@ -118,7 +120,7 @@ public static class UiFactory
     {
         RectTransform rectTransform = CreateRect(name, parent, anchorMin, anchorMax, pivot, sizeDelta, anchoredPosition);
         TextMeshProUGUI text = rectTransform.gameObject.AddComponent<TextMeshProUGUI>();
-        text.font = GetOrCreateTmpFontAsset(font != null ? font : GetBuiltinFont());
+        text.font = GetOrCreateDefaultTmpFont(font);
         text.fontSize = fontSize;
         text.fontStyle = MapFontStyle(fontStyle);
         text.alignment = MapAlignment(alignment);
@@ -126,11 +128,11 @@ public static class UiFactory
         text.richText = richText;
         text.textWrappingMode = TextWrappingModes.Normal;
         text.overflowMode = TextOverflowModes.Overflow;
-        text.extraPadding = true;
+        text.extraPadding = false;
         text.isTextObjectScaleStatic = true;
         text.enableAutoSizing = false;
         text.raycastTarget = false;
-        ApplyTextMaterial(text, fontSize >= 20 || fontStyle == FontStyle.Bold || fontStyle == FontStyle.BoldAndItalic);
+        ApplyTextMaterial(text, fontSize, fontStyle == FontStyle.Bold || fontStyle == FontStyle.BoldAndItalic);
         return text;
     }
 
@@ -145,35 +147,32 @@ public static class UiFactory
         return group;
     }
 
-    public static Font GetBuiltinFont()
+    public static TMP_FontAsset GetOrCreateDefaultTmpFont(TMP_FontAsset font = null)
     {
-        if (s_BuiltinFont != null)
+        if (IsUsableFontAsset(font))
         {
-            return s_BuiltinFont;
+            return font;
         }
 
-        s_BuiltinFont = TryCreateDynamicOsFont(s_PreferredSystemFonts);
-        if (s_BuiltinFont == null)
+        TMP_FontAsset fallback = LoadFixedFontAsset(ref s_DefaultBodyFont, DefaultBodyFontResourcePath);
+        if (fallback != null)
         {
-            s_BuiltinFont = TryLoadBuiltinFont("LegacyRuntime.ttf");
+            return fallback;
         }
 
-        if (s_BuiltinFont == null)
+        fallback = LoadFixedFontAsset(ref s_DefaultDisplayFont, DefaultDisplayFontResourcePath);
+        if (fallback != null)
         {
-            s_BuiltinFont = Font.CreateDynamicFontFromOSFont("Arial", 16);
+            return fallback;
         }
 
-        return s_BuiltinFont;
-    }
-
-    public static TMP_FontAsset GetOrCreateDefaultTmpFont(Font font = null)
-    {
-        return GetOrCreateTmpFontAsset(font != null ? font : GetBuiltinFont());
+        return font != null ? font : TMP_Settings.defaultFontAsset;
     }
 
     public static void RefreshTextMaterial(TMP_Text text, bool emphasize)
     {
-        ApplyTextMaterial(text, emphasize);
+        int fontSize = text != null ? Mathf.Max(1, Mathf.RoundToInt(text.fontSize)) : 0;
+        ApplyTextMaterial(text, fontSize, emphasize);
     }
 
     public static void Stretch(RectTransform rectTransform)
@@ -189,6 +188,25 @@ public static class UiFactory
         rectTransform.sizeDelta = Vector2.zero;
         rectTransform.anchoredPosition = Vector2.zero;
         rectTransform.localScale = Vector3.one;
+    }
+
+    private static float ComputeQuantizedScaleFactor()
+    {
+        float widthScale = Screen.width / ReferenceWidth;
+        float heightScale = Screen.height / ReferenceHeight;
+        float rawScale = Mathf.Min(widthScale, heightScale);
+        if (rawScale >= 1f)
+        {
+            return Mathf.Max(1f, Mathf.Floor(rawScale));
+        }
+
+        float quantized = Mathf.Round(rawScale / UiScaleStep) * UiScaleStep;
+        return Mathf.Clamp(quantized, MinimumUiScale, 1f);
+    }
+
+    private static Vector2 RoundVector(Vector2 value)
+    {
+        return new Vector2(Mathf.Round(value.x), Mathf.Round(value.y));
     }
 
     private static Sprite GetWhiteSprite()
@@ -213,67 +231,26 @@ public static class UiFactory
         return s_WhiteSprite;
     }
 
-    private static Font TryLoadBuiltinFont(string resourceName)
+    private static TMP_FontAsset LoadFixedFontAsset(ref TMP_FontAsset cache, string resourcePath)
     {
-        try
+        if (cache != null)
         {
-            return Resources.GetBuiltinResource<Font>(resourceName);
+            return IsUsableFontAsset(cache) ? cache : null;
         }
-        catch (System.ArgumentException)
+
+        cache = Resources.Load<TMP_FontAsset>(resourcePath);
+        if (!IsUsableFontAsset(cache))
         {
+            cache = null;
             return null;
         }
-    }
 
-    private static Font TryCreateDynamicOsFont(string[] fontNames)
-    {
-        try
+        if (!IsHighQualityFontAsset(cache))
         {
-            return Font.CreateDynamicFontFromOSFont(fontNames, 16);
-        }
-        catch (System.Exception)
-        {
-            return null;
-        }
-    }
-
-    private static TMP_FontAsset GetOrCreateTmpFontAsset(Font font)
-    {
-        Font sourceFont = font != null ? font : GetBuiltinFont();
-        int key = sourceFont != null ? sourceFont.GetInstanceID() : 0;
-        if (key != 0 && s_TmpFontAssets.TryGetValue(key, out TMP_FontAsset cachedAsset) && cachedAsset != null)
-        {
-            return cachedAsset;
+            Debug.LogWarning($"[UiFactory] Fixed TMP font '{cache.name}' is below the expected quality target.");
         }
 
-        TMP_FontAsset fontAsset = null;
-        if (sourceFont != null)
-        {
-            try
-            {
-                fontAsset = TMP_FontAsset.CreateFontAsset(sourceFont, 90, 8, UnityEngine.TextCore.LowLevel.GlyphRenderMode.SDFAA, 1024, 1024, AtlasPopulationMode.Dynamic, true);
-            }
-            catch (System.Exception)
-            {
-                fontAsset = null;
-            }
-        }
-
-        if (fontAsset == null)
-        {
-            fontAsset = TMP_Settings.defaultFontAsset;
-        }
-
-        if (fontAsset != null)
-        {
-            fontAsset.hideFlags = HideFlags.HideAndDontSave;
-            if (key != 0)
-            {
-                s_TmpFontAssets[key] = fontAsset;
-            }
-        }
-
-        return fontAsset;
+        return cache;
     }
 
     private static TextAlignmentOptions MapAlignment(TextAnchor alignment)
@@ -318,7 +295,7 @@ public static class UiFactory
         }
     }
 
-    private static void ApplyTextMaterial(TMP_Text text, bool emphasize)
+    private static void ApplyTextMaterial(TMP_Text text, int fontSize, bool emphasize)
     {
         if (text == null || text.fontSharedMaterial == null)
         {
@@ -329,22 +306,23 @@ public static class UiFactory
         {
             hideFlags = HideFlags.HideAndDontSave
         };
-        runtimeMaterial.EnableKeyword(ShaderUtilities.Keyword_Outline);
+        runtimeMaterial.DisableKeyword(ShaderUtilities.Keyword_Outline);
+
         runtimeMaterial.DisableKeyword(ShaderUtilities.Keyword_Underlay);
 
         if (runtimeMaterial.HasProperty(ShaderUtilities.ID_FaceDilate))
         {
-            runtimeMaterial.SetFloat(ShaderUtilities.ID_FaceDilate, emphasize ? 0.045f : 0.018f);
+            runtimeMaterial.SetFloat(ShaderUtilities.ID_FaceDilate, 0f);
         }
 
         if (runtimeMaterial.HasProperty(ShaderUtilities.ID_OutlineWidth))
         {
-            runtimeMaterial.SetFloat(ShaderUtilities.ID_OutlineWidth, emphasize ? 0.06f : 0.03f);
+            runtimeMaterial.SetFloat(ShaderUtilities.ID_OutlineWidth, 0f);
         }
 
         if (runtimeMaterial.HasProperty(ShaderUtilities.ID_OutlineColor))
         {
-            runtimeMaterial.SetColor(ShaderUtilities.ID_OutlineColor, new Color(0.03f, 0.04f, 0.05f, emphasize ? 0.72f : 0.42f));
+            runtimeMaterial.SetColor(ShaderUtilities.ID_OutlineColor, new Color(0.03f, 0.04f, 0.05f, 0f));
         }
 
         if (runtimeMaterial.HasProperty(ShaderUtilities.ID_UnderlayColor))
@@ -368,5 +346,34 @@ public static class UiFactory
         }
 
         text.fontSharedMaterial = runtimeMaterial;
+    }
+
+    private static bool IsHighQualityFontAsset(TMP_FontAsset fontAsset)
+    {
+        if (!IsUsableFontAsset(fontAsset))
+        {
+            return false;
+        }
+
+        int atlasWidth = fontAsset.atlasWidth;
+        int atlasHeight = fontAsset.atlasHeight;
+        if ((atlasWidth <= 0 || atlasHeight <= 0) && fontAsset.atlasTextures != null && fontAsset.atlasTextures.Length > 0 && fontAsset.atlasTextures[0] != null)
+        {
+            atlasWidth = fontAsset.atlasTextures[0].width;
+            atlasHeight = fontAsset.atlasTextures[0].height;
+        }
+
+        float pointSize = fontAsset.faceInfo.pointSize;
+        bool hasLargeAtlas = atlasWidth >= MinimumAcceptedAtlasSize && atlasHeight >= MinimumAcceptedAtlasSize;
+        bool hasExpectedSamplingSize = pointSize <= 0f || pointSize >= MinimumAcceptedSamplingPointSize;
+        return hasLargeAtlas && hasExpectedSamplingSize;
+    }
+
+    private static bool IsUsableFontAsset(TMP_FontAsset fontAsset)
+    {
+        return fontAsset != null
+            && fontAsset.atlasTextures != null
+            && fontAsset.atlasTextures.Length > 0
+            && fontAsset.atlasTextures[0] != null;
     }
 }

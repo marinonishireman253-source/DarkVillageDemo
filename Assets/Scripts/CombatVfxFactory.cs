@@ -6,6 +6,7 @@ public static class CombatVfxFactory
     private const string PunchImpactResourcePrefix = "Vfx/PunchImpact/impact_";
     private const float PunchImpactPixelsPerUnit = 32f;
     private static Material s_LineMaterial;
+    private static Material s_ParticleMaterial;
     private static Sprite[] s_PunchImpactSprites;
 
     public static void SpawnSlash(Transform source, Color color)
@@ -34,6 +35,13 @@ public static class CombatVfxFactory
         GameObject fallbackRoot = new GameObject("HitBurstVfx");
         HitBurstVfx fallbackEffect = fallbackRoot.AddComponent<HitBurstVfx>();
         fallbackEffect.Initialize(position, attackForward, color, GetLineMaterial());
+    }
+
+    public static void SpawnRisingEmberBurst(Vector3 position, Color color)
+    {
+        GameObject root = new GameObject("RisingEmberBurstVfx");
+        RisingEmberBurstVfx effect = root.AddComponent<RisingEmberBurstVfx>();
+        effect.Initialize(position, color, GetParticleMaterial());
     }
 
     private static Sprite[] GetPunchImpactSprites()
@@ -116,6 +124,109 @@ public static class CombatVfxFactory
             renderQueue = (int)RenderQueue.Transparent + 50
         };
         return s_LineMaterial;
+    }
+
+    private static Material GetParticleMaterial()
+    {
+        if (s_ParticleMaterial != null)
+        {
+            return s_ParticleMaterial;
+        }
+
+        Shader shader = Shader.Find("Particles/Standard Unlit");
+        if (shader == null)
+        {
+            shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+        }
+
+        if (shader == null)
+        {
+            shader = Shader.Find("Sprites/Default");
+        }
+
+        s_ParticleMaterial = new Material(shader)
+        {
+            hideFlags = HideFlags.HideAndDontSave,
+            renderQueue = (int)RenderQueue.Transparent + 45
+        };
+        return s_ParticleMaterial;
+    }
+}
+
+internal sealed class RisingEmberBurstVfx : MonoBehaviour
+{
+    public void Initialize(Vector3 position, Color color, Material material)
+    {
+        transform.position = position;
+
+        ParticleSystem particles = gameObject.AddComponent<ParticleSystem>();
+        particles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        ParticleSystemRenderer renderer = particles.GetComponent<ParticleSystemRenderer>();
+        if (renderer != null)
+        {
+            renderer.material = material;
+            renderer.renderMode = ParticleSystemRenderMode.Billboard;
+            renderer.sortingOrder = 150;
+        }
+
+        var main = particles.main;
+        main.playOnAwake = false;
+        main.duration = 2f;
+        main.loop = false;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(0.9f, 1.6f);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(0.55f, 1.35f);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.08f, 0.18f);
+        main.startColor = new ParticleSystem.MinMaxGradient(new Color(color.r, color.g, color.b, 0.95f));
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+        main.maxParticles = 40;
+
+        var emission = particles.emission;
+        emission.rateOverTime = 0f;
+        emission.SetBursts(new[] { new ParticleSystem.Burst(0f, 18, 28) });
+
+        var shape = particles.shape;
+        shape.enabled = true;
+        shape.shapeType = ParticleSystemShapeType.Cone;
+        shape.angle = 18f;
+        shape.radius = 0.18f;
+
+        var velocity = particles.velocityOverLifetime;
+        velocity.enabled = true;
+        velocity.space = ParticleSystemSimulationSpace.World;
+        velocity.x = new ParticleSystem.MinMaxCurve(-0.12f, 0.12f);
+        velocity.y = new ParticleSystem.MinMaxCurve(0.36f, 0.92f);
+        velocity.z = new ParticleSystem.MinMaxCurve(-0.06f, 0.06f);
+
+        var sizeOverLifetime = particles.sizeOverLifetime;
+        sizeOverLifetime.enabled = true;
+        sizeOverLifetime.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.EaseInOut(0f, 1f, 1f, 0.2f));
+
+        var colorOverLifetime = particles.colorOverLifetime;
+        colorOverLifetime.enabled = true;
+        Gradient gradient = new Gradient();
+        gradient.SetKeys(
+            new[]
+            {
+                new GradientColorKey(color, 0f),
+                new GradientColorKey(new Color(1f, 0.92f, 0.58f), 0.55f),
+                new GradientColorKey(new Color(1f, 0.56f, 0.18f), 1f)
+            },
+            new[]
+            {
+                new GradientAlphaKey(0f, 0f),
+                new GradientAlphaKey(0.95f, 0.1f),
+                new GradientAlphaKey(0.75f, 0.72f),
+                new GradientAlphaKey(0f, 1f)
+            });
+        colorOverLifetime.color = new ParticleSystem.MinMaxGradient(gradient);
+
+        var noise = particles.noise;
+        noise.enabled = true;
+        noise.strength = 0.18f;
+        noise.frequency = 0.6f;
+
+        particles.Play();
+        Destroy(gameObject, 2.1f);
     }
 }
 

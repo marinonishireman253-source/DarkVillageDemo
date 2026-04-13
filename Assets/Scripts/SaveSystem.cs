@@ -18,6 +18,7 @@ public sealed class SaveSystem : MonoBehaviour
         public string currentObjectiveId;
         public string currentObjectiveText;
         public string currentMarkerText;
+        public string choiceResult;
         public FlagData[] flags;
         public string[] collectedItems;
         public string savedAtUtc;
@@ -195,7 +196,7 @@ public sealed class SaveSystem : MonoBehaviour
             }
         }
 
-        ChapterState.RestoreRuntimeState(flags, data.collectedItems);
+        ChapterState.RestoreRuntimeState(flags, data.collectedItems, ParseChoiceResult(data.choiceResult));
 
         PlayerMover player = FindFirstObjectByType<PlayerMover>();
         if (player != null)
@@ -315,10 +316,23 @@ public sealed class SaveSystem : MonoBehaviour
             currentObjectiveId = tracker != null && !tracker.IsCompleted ? tracker.CurrentObjectiveId : string.Empty,
             currentObjectiveText = tracker != null && !tracker.IsCompleted ? tracker.CurrentObjectiveText : string.Empty,
             currentMarkerText = tracker != null && !tracker.IsCompleted ? tracker.CurrentMarkerText : string.Empty,
+            choiceResult = ChapterState.CurrentChoiceResult.ToString(),
             flags = flags.ToArray(),
             collectedItems = collectedItems,
             savedAtUtc = DateTime.UtcNow.ToString("o")
         };
+    }
+
+    private static ChapterState.ChoiceResult ParseChoiceResult(string rawValue)
+    {
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            return ChapterState.ChoiceResult.None;
+        }
+
+        return Enum.TryParse(rawValue, true, out ChapterState.ChoiceResult parsed)
+            ? parsed
+            : ChapterState.ChoiceResult.None;
     }
 
     private bool IsExplorationScene(Scene scene)

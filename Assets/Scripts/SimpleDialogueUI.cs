@@ -4,9 +4,12 @@ using UnityEngine.InputSystem;
 
 public class SimpleDialogueUI : MonoBehaviour
 {
+    private const bool EnableDialogueDiagnostics = true;
+
     public static SimpleDialogueUI Instance { get; private set; }
     public static bool IsOpen => Instance != null && Instance._isOpen;
     public static bool AllLinesShown => Instance != null && Instance._currentLineIndex >= Instance._lines.Count - 1;
+    public static int LastClosedFrame { get; private set; } = -1;
 
     public event System.Action OnAllLinesCompleted;
 
@@ -108,6 +111,12 @@ public class SimpleDialogueUI : MonoBehaviour
             _lines.Add("...");
         }
 
+        if (EnableDialogueDiagnostics)
+        {
+            Debug.Log(
+                $"[DialogueDiagnostics][SimpleDialogueUI.Show] speaker='{_speakerName}' lineCount={_lines.Count} firstLine='{_lines[0]}'");
+        }
+
         _currentLineIndex = 0;
         _isOpen = true;
         _openedFrame = Time.frameCount;
@@ -123,6 +132,7 @@ public class SimpleDialogueUI : MonoBehaviour
 
     public void Hide()
     {
+        LastClosedFrame = Time.frameCount;
         _isOpen = false;
         _speakerName = string.Empty;
         _lines.Clear();
@@ -176,12 +186,24 @@ public class SimpleDialogueUI : MonoBehaviour
     {
         if (!_isOpen || !UiBootstrap.TryGetDialogueView(out DialogueCanvasView dialogueView))
         {
+            if (EnableDialogueDiagnostics)
+            {
+                bool hasDialogueView = UiBootstrap.TryGetDialogueView(out _);
+                Debug.LogWarning(
+                    $"[DialogueDiagnostics][SimpleDialogueUI.SyncCanvasView] skipped isOpen={_isOpen} hasDialogueView={hasDialogueView}");
+            }
             return;
         }
 
         string hintText = HasMoreLines
             ? $"E / Enter / Space 继续    Esc 关闭    {_currentLineIndex + 1}/{_lines.Count}"
             : "E / Enter / Space 关闭";
+
+        if (EnableDialogueDiagnostics)
+        {
+            Debug.Log(
+                $"[DialogueDiagnostics][SimpleDialogueUI.SyncCanvasView] speaker='{_speakerName}' lineIndex={_currentLineIndex} currentLine='{CurrentLine}' hint='{hintText}'");
+        }
 
         dialogueView.ShowDialogue(_speakerName, CurrentLine, hintText);
 

@@ -17,6 +17,7 @@ public class PlayerMover : MonoBehaviour
     [SerializeField] private float acceleration = 22f;
     [SerializeField] private float deceleration = 20f;
     [SerializeField] private float turnSpeed = 14f;
+    [SerializeField] private float externalVelocityDecay = 18f;
     [SerializeField] private bool moveRelativeToCamera = true;
     [SerializeField] private MovementMode movementMode = MovementMode.GroundPlaneXZ;
 
@@ -33,9 +34,11 @@ public class PlayerMover : MonoBehaviour
     [SerializeField] private LayerMask interactionMask = ~0;
 
     public Vector3 Velocity => _currentVelocity;
+    public Vector3 ExternalVelocity => _externalVelocity;
     public bool HasInteractableTarget => _currentInteractable != null;
     public IInteractable CurrentInteractable => _currentInteractable;
-    public bool IsSprintActive => !SimpleDialogueUI.IsOpen && IsSprinting() && _moveInput.sqrMagnitude > 0.0001f;
+    public bool IsSprintActive => !SimpleDialogueUI.IsOpen && !InventoryController.IsOpen && !AshParlorChoiceOverlay.IsVisible && !FloorSummaryPanel.IsVisible && IsSprinting() && _moveInput.sqrMagnitude > 0.0001f;
+    public bool IsControlLocked => Time.time < _controlLockedUntil;
 
     private InputAction _moveAction;
     private InputAction _sprintAction;
@@ -52,6 +55,9 @@ public class PlayerMover : MonoBehaviour
     private Vector2 _groundPlaneXRange;
     private Vector2 _groundPlaneZRange;
     private bool _useGroundPlaneBounds;
+    private Vector3 _externalVelocity;
+    private float _controlLockedUntil;
+    private float _speedMultiplier = 1f;
 
     public void ConfigureGroundPlane()
     {
@@ -60,6 +66,7 @@ public class PlayerMover : MonoBehaviour
         _useSideScrollHorizontalRange = false;
         _useGroundPlaneBounds = false;
         _currentVelocity = Vector3.zero;
+        _externalVelocity = Vector3.zero;
     }
 
     public void ConfigureGroundPlane(Vector2 xRange, Vector2 zRange, bool useCameraRelativeMovement)
@@ -71,6 +78,7 @@ public class PlayerMover : MonoBehaviour
         _useGroundPlaneBounds = xRange.x < xRange.y && zRange.x < zRange.y;
         _useSideScrollHorizontalRange = false;
         _currentVelocity = Vector3.zero;
+        _externalVelocity = Vector3.zero;
     }
 
     public void ConfigureSideScroller(float lockedDepth, Vector2 horizontalRange)
@@ -82,10 +90,37 @@ public class PlayerMover : MonoBehaviour
         _useSideScrollHorizontalRange = horizontalRange.x < horizontalRange.y;
         _useGroundPlaneBounds = false;
         _currentVelocity = Vector3.zero;
+        _externalVelocity = Vector3.zero;
 
         Vector3 position = transform.position;
         position.z = lockedDepth;
         transform.position = position;
+    }
+
+    public void AddImpulse(Vector3 impulse)
+    {
+        if (movementMode == MovementMode.SideScrollerX)
+        {
+            _externalVelocity.x += impulse.x;
+            return;
+        }
+
+        _externalVelocity += new Vector3(impulse.x, 0f, impulse.z);
+    }
+
+    public void SetSpeedMultiplier(float multiplier)
+    {
+        _speedMultiplier = Mathf.Clamp(multiplier, 0.1f, 2f);
+    }
+
+    public void ResetSpeedMultiplier()
+    {
+        _speedMultiplier = 1f;
+    }
+
+    public void LockControls(float duration)
+    {
+        _controlLockedUntil = Mathf.Max(_controlLockedUntil, Time.time + Mathf.Max(0f, duration));
     }
 
     private void OnEnable()
@@ -102,11 +137,38 @@ public class PlayerMover : MonoBehaviour
 
     private void Update()
     {
+        if (ShouldBlockInteractionInput())
+        {
+            _fallbackInteractRequested = false;
+            ClearInteractionTarget();
+            _currentVelocity = Vector3.zero;
+            _externalVelocity = Vector3.zero;
+            return;
+        }
+
         RefreshMoveInput();
+
+        if (InventoryController.IsOpen || AshParlorChoiceOverlay.IsVisible || FloorSummaryPanel.IsVisible)
+        {
+            ClearInteractionTarget();
+            _currentVelocity = Vector3.zero;
+            _externalVelocity = Vector3.zero;
+            return;
+        }
+
         UpdateMovement(Time.deltaTime);
         UpdateInteractionTarget();
         ProcessActionInteraction();
         ProcessFallbackInteraction();
+    }
+
+    private bool ShouldBlockInteractionInput()
+    {
+        return SimpleDialogueUI.IsOpen
+            || InventoryController.IsOpen
+            || AshParlorChoiceOverlay.IsVisible
+            || FloorSummaryPanel.IsVisible
+            || Time.frameCount <= SimpleDialogueUI.LastClosedFrame;
     }
 
     private void BindInput()
@@ -184,23 +246,26 @@ public class PlayerMover : MonoBehaviour
 
     private void UpdateMovement(float deltaTime)
     {
-        if (SimpleDialogueUI.IsOpen)
+        if (SimpleDialogueUI.IsOpen || AshParlorChoiceOverlay.IsVisible || FloorSummaryPanel.IsVisible)
         {
             _currentVelocity = Vector3.zero;
+            _externalVelocity = Vector3.zero;
             return;
         }
 
-        Vector3 desiredDirection = GetDesiredDirection();
+        Vector3 desiredDirection = IsControlLocked ? Vector3.zero : GetDesiredDirection();
 
-        float targetSpeed = IsSprinting() ? sprintSpeed : walkSpeed;
+        float targetSpeed = (IsSprinting() ? sprintSpeed : walkSpeed) * _speedMultiplier;
         Vector3 targetVelocity = desiredDirection * targetSpeed;
 
         float rate = desiredDirection.sqrMagnitude > 0.0001f ? acceleration : deceleration;
         _currentVelocity = Vector3.MoveTowards(_currentVelocity, targetVelocity, rate * deltaTime);
+        _externalVelocity = Vector3.MoveTowards(_externalVelocity, Vector3.zero, externalVelocityDecay * deltaTime);
+        Vector3 totalVelocity = _currentVelocity + _externalVelocity;
 
         if (movementMode == MovementMode.SideScrollerX)
         {
-            Vector3 position = transform.position + Vector3.right * (_currentVelocity.x * deltaTime);
+            Vector3 position = transform.position + Vector3.right * (totalVelocity.x * deltaTime);
             position.z = _sideScrollDepth;
 
             if (_useSideScrollHorizontalRange)
@@ -210,9 +275,9 @@ public class PlayerMover : MonoBehaviour
 
             transform.position = position;
 
-            if (Mathf.Abs(_currentVelocity.x) > 0.0001f)
+            if (Mathf.Abs(totalVelocity.x) > 0.0001f)
             {
-                Vector3 facing = _currentVelocity.x >= 0f ? Vector3.right : Vector3.left;
+                Vector3 facing = totalVelocity.x >= 0f ? Vector3.right : Vector3.left;
                 Quaternion targetRotation = Quaternion.LookRotation(facing, Vector3.up);
                 transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, turnSpeed * deltaTime);
             }
@@ -220,7 +285,7 @@ public class PlayerMover : MonoBehaviour
             return;
         }
 
-        transform.position += _currentVelocity * deltaTime;
+        transform.position += totalVelocity * deltaTime;
 
         if (_useGroundPlaneBounds)
         {
@@ -230,7 +295,7 @@ public class PlayerMover : MonoBehaviour
             transform.position = position;
         }
 
-        Vector3 planarVelocity = new Vector3(_currentVelocity.x, 0f, _currentVelocity.z);
+        Vector3 planarVelocity = new Vector3(totalVelocity.x, 0f, totalVelocity.z);
         if (planarVelocity.sqrMagnitude > 0.0001f)
         {
             Quaternion targetRotation = Quaternion.LookRotation(planarVelocity.normalized, Vector3.up);
@@ -316,7 +381,7 @@ public class PlayerMover : MonoBehaviour
 
         if (!ReferenceEquals(best, _currentInteractable))
         {
-            _currentInteractable?.OnFocusLost(this);
+            ClearInteractionTarget();
             _currentInteractable = best;
             _currentInteractable?.OnFocusGained(this);
         }
@@ -361,6 +426,11 @@ public class PlayerMover : MonoBehaviour
 
     private void ProcessActionInteraction()
     {
+        if (ShouldBlockInteractionInput())
+        {
+            return;
+        }
+
         if (_interactAction == null || !_interactAction.enabled)
         {
             return;
@@ -374,6 +444,12 @@ public class PlayerMover : MonoBehaviour
 
     private void ProcessFallbackInteraction()
     {
+        if (ShouldBlockInteractionInput())
+        {
+            _fallbackInteractRequested = false;
+            return;
+        }
+
         if (!_fallbackInteractRequested)
         {
             return;
@@ -381,6 +457,17 @@ public class PlayerMover : MonoBehaviour
 
         _fallbackInteractRequested = false;
         _currentInteractable?.Interact(this);
+    }
+
+    private void ClearInteractionTarget()
+    {
+        if (_currentInteractable == null)
+        {
+            return;
+        }
+
+        _currentInteractable.OnFocusLost(this);
+        _currentInteractable = null;
     }
 
     private void OnDrawGizmosSelected()

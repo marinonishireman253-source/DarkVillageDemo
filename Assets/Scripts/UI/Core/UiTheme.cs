@@ -1,58 +1,16 @@
 using System;
+using TMPro;
 using UnityEngine;
 
 [CreateAssetMenu(fileName = "UiTheme", menuName = "DarkVillage/UI Theme")]
 public sealed class UiTheme : ScriptableObject
 {
-    private static readonly string[] PreferredBodyResourceFonts =
-    {
-        "Fonts/Songti",
-        "Fonts/Baskerville"
-    };
-
-    private static readonly string[] PreferredDisplayResourceFonts =
-    {
-        "Fonts/Baskerville",
-        "Fonts/Songti"
-    };
-
-    private static readonly string[] PreferredBodyFonts =
-    {
-        "Source Han Serif SC",
-        "Source Han Serif CN",
-        "Noto Serif CJK SC",
-        "Songti SC",
-        "STSong",
-        "SimSun",
-        "Songti TC",
-        "PMingLiU",
-        "EB Garamond",
-        "Libre Baskerville",
-        "Times New Roman",
-        "Georgia",
-        "Palatino"
-    };
-
-    private static readonly string[] PreferredDisplayFonts =
-    {
-        "EB Garamond",
-        "Libre Baskerville",
-        "Cormorant Garamond",
-        "Baskerville",
-        "Source Han Serif SC",
-        "Source Han Serif CN",
-        "Noto Serif CJK SC",
-        "Songti SC",
-        "STSong",
-        "SimSun",
-        "Times New Roman",
-        "Georgia",
-        "Palatino"
-    };
+    private const string DefaultBodyFontResourcePath = "Fonts/TMP/Hiragino Sans GB UI Body SDF";
+    private const string DefaultDisplayFontResourcePath = "Fonts/TMP/Hiragino Sans GB UI Display SDF";
 
     [Header("Fonts")]
-    [SerializeField] private Font bodyFont;
-    [SerializeField] private Font displayFont;
+    [SerializeField] private TMP_FontAsset bodyFontAsset;
+    [SerializeField] private TMP_FontAsset displayFontAsset;
 
     [Header("Chrome Sprites")]
     [SerializeField] private Sprite dialogueFrameSprite;
@@ -86,8 +44,8 @@ public sealed class UiTheme : ScriptableObject
     [Header("Animation")]
     [SerializeField] private float fastFadeDuration = 0.16f;
 
-    public Font BodyFont => bodyFont != null ? bodyFont : LoadBodyFont();
-    public Font DisplayFont => displayFont != null ? displayFont : LoadDisplayFont(bodyFont != null ? bodyFont : LoadBodyFont());
+    public TMP_FontAsset BodyFont => ResolveBodyFont();
+    public TMP_FontAsset DisplayFont => ResolveDisplayFont();
     public Sprite DialogueFrameSprite => dialogueFrameSprite != null ? dialogueFrameSprite : TryLoadResourceSprite("UI/Slices/DialogueFrame");
     public Sprite PortraitFrameSprite => portraitFrameSprite != null ? portraitFrameSprite : TryLoadResourceSprite("UI/Slices/PortraitFrame");
     public Sprite ChoicePanelSprite => choicePanelSprite != null ? choicePanelSprite : TryLoadResourceSprite("UI/Slices/ChoicePanel");
@@ -122,14 +80,14 @@ public sealed class UiTheme : ScriptableObject
 
     public void EnsureRuntimeDefaults()
     {
-        if (bodyFont == null)
+        if (!IsUsableFontAsset(bodyFontAsset))
         {
-            bodyFont = LoadBodyFont();
+            bodyFontAsset = LoadBodyFont();
         }
 
-        if (displayFont == null)
+        if (!IsUsableFontAsset(displayFontAsset))
         {
-            displayFont = LoadDisplayFont(bodyFont);
+            displayFontAsset = LoadDisplayFont(bodyFontAsset);
         }
     }
 
@@ -141,88 +99,76 @@ public sealed class UiTheme : ScriptableObject
         return theme;
     }
 
-    private static Font LoadBodyFont()
+    private static TMP_FontAsset LoadBodyFont()
     {
-        Font projectFont = TryLoadResourceFont(PreferredBodyResourceFonts);
-        if (projectFont != null)
+        TMP_FontAsset body = LoadUiFontAsset(DefaultBodyFontResourcePath, "body");
+        if (IsUsableFontAsset(body))
         {
-            return projectFont;
+            return body;
         }
 
-        Font font = TryCreateDynamicOsFont(PreferredBodyFonts);
-        if (font != null)
+        TMP_FontAsset display = LoadUiFontAsset(DefaultDisplayFontResourcePath, "display");
+        if (IsUsableFontAsset(display))
         {
-            return font;
+            Debug.LogWarning("[UiTheme] Body TMP font is unusable. Falling back to display TMP font.");
+            return display;
         }
 
-        return LoadBuiltinFallback();
+        return body;
     }
 
-    private static Font LoadDisplayFont(Font bodyFallback)
+    private static TMP_FontAsset LoadDisplayFont(TMP_FontAsset bodyFallback)
     {
-        Font projectFont = TryLoadResourceFont(PreferredDisplayResourceFonts);
-        if (projectFont != null)
-        {
-            return projectFont;
-        }
-
-        Font font = TryCreateDynamicOsFont(PreferredDisplayFonts);
-        if (font != null)
-        {
-            return font;
-        }
-
-        return bodyFallback != null ? bodyFallback : LoadBuiltinFallback();
+        TMP_FontAsset displayFont = LoadUiFontAsset(DefaultDisplayFontResourcePath, "display");
+        return IsUsableFontAsset(displayFont) ? displayFont : bodyFallback;
     }
 
-    private static Font LoadBuiltinFallback()
+    private TMP_FontAsset ResolveBodyFont()
     {
-        Font font = TryLoadBuiltinFont("LegacyRuntime.ttf");
-
-        if (font != null)
+        if (IsUsableFontAsset(bodyFontAsset))
         {
-            return font;
+            return bodyFontAsset;
         }
 
-        return Font.CreateDynamicFontFromOSFont("Arial", 16);
+        bodyFontAsset = LoadBodyFont();
+        return bodyFontAsset;
     }
 
-    private static Font TryLoadResourceFont(string[] resourcePaths)
+    private TMP_FontAsset ResolveDisplayFont()
     {
-        for (int i = 0; i < resourcePaths.Length; i++)
+        if (IsUsableFontAsset(displayFontAsset))
         {
-            Font font = Resources.Load<Font>(resourcePaths[i]);
-            if (font != null)
-            {
-                return font;
-            }
+            return displayFontAsset;
         }
 
+        displayFontAsset = LoadDisplayFont(ResolveBodyFont());
+        return displayFontAsset;
+    }
+
+    private static TMP_FontAsset LoadUiFontAsset(string resourcePath, string role)
+    {
+        TMP_FontAsset fontAsset = Resources.Load<TMP_FontAsset>(resourcePath);
+        if (fontAsset != null)
+        {
+            return fontAsset;
+        }
+
+        if (TMP_Settings.defaultFontAsset != null)
+        {
+            Debug.LogError($"[UiTheme] Missing fixed {role} TMP font at Resources/{resourcePath}. Falling back to TMP default font.");
+            return TMP_Settings.defaultFontAsset;
+        }
+
+        Debug.LogError($"[UiTheme] Missing fixed {role} TMP font at Resources/{resourcePath}, and TMP default font is also unavailable.");
         return null;
     }
 
-    private static Font TryLoadBuiltinFont(string resourceName)
+    private static bool IsUsableFontAsset(TMP_FontAsset fontAsset)
     {
-        try
-        {
-            return Resources.GetBuiltinResource<Font>(resourceName);
-        }
-        catch (System.ArgumentException)
-        {
-            return null;
-        }
-    }
-
-    private static Font TryCreateDynamicOsFont(string[] fontNames)
-    {
-        try
-        {
-            return Font.CreateDynamicFontFromOSFont(fontNames, 16);
-        }
-        catch (System.Exception)
-        {
-            return null;
-        }
+        return fontAsset != null
+            && fontAsset.atlasTextures != null
+            && fontAsset.atlasTextures.Length > 0
+            && fontAsset.atlasTextures[0] != null;
     }
 
     private static Sprite TryLoadResourceSprite(string resourcePath)

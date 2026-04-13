@@ -237,6 +237,8 @@ public class CombatEncounterTrigger : MonoBehaviour
 
     private void SpawnEnemy()
     {
+        RemovePreviewMonster();
+
         GameObject enemyRoot = GameObject.CreatePrimitive(PrimitiveType.Capsule);
         enemyRoot.name = enemyName.Replace(" ", string.Empty);
         enemyRoot.transform.SetParent(transform, true);
@@ -266,6 +268,30 @@ public class CombatEncounterTrigger : MonoBehaviour
         enemy.Configure(enemyName, enemyHealth, enemyDamage);
         enemy.OnDefeated += HandleEnemyDefeated;
         ActiveEnemy = enemy;
+    }
+
+    private void RemovePreviewMonster()
+    {
+        Transform roomRoot = transform.parent;
+        if (roomRoot == null)
+        {
+            return;
+        }
+
+        Transform previewMonster = roomRoot.Find("Monster_BeamVisitor");
+        if (previewMonster == null)
+        {
+            return;
+        }
+
+        if (Application.isPlaying)
+        {
+            Destroy(previewMonster.gameObject);
+        }
+        else
+        {
+            DestroyImmediate(previewMonster.gameObject);
+        }
     }
 
     private void HandleEnemyDefeated(SimpleEnemyController enemy)

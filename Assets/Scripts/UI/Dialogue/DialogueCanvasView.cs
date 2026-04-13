@@ -7,13 +7,13 @@ public sealed class DialogueCanvasView : MonoBehaviour
 {
     private sealed class ChoiceRow
     {
-        public GameObject Root { get; set; }
-        public Image Background { get; set; }
-        public TMP_Text Label { get; set; }
-        public Button Button { get; set; }
+        public GameObject Root;
+        public Image Background;
+        public TMP_Text Label;
+        public Button Button;
     }
 
-    [Header("Main Dialogue Panel (Bottom anchored)")]
+    [Header("Dialogue")]
     [SerializeField] private CanvasGroup dialogueCanvasGroup;
     [SerializeField] private RectTransform dialoguePanelRoot;
     [SerializeField] private Image dialogueBackground;
@@ -21,9 +21,8 @@ public sealed class DialogueCanvasView : MonoBehaviour
     [SerializeField] private TMP_Text speakerNameText;
     [SerializeField] private Image speakerNamePlate;
     [SerializeField] private TMP_Text hintText;
-    [SerializeField] private ScrollRect dialogueBodyScroll;
 
-    [Header("Portrait Frame")]
+    [Header("Portrait")]
     [SerializeField] private GameObject portraitRoot;
     [SerializeField] private Image portraitFrameDecoration;
     [SerializeField] private Image portraitMatteFill;
@@ -34,24 +33,12 @@ public sealed class DialogueCanvasView : MonoBehaviour
     [SerializeField] private Image portraitNamePlate;
     [SerializeField] private TMP_Text portraitNameText;
 
-    [Header("Choices Panel")]
+    [Header("Choices")]
     [SerializeField] private CanvasGroup choicesCanvasGroup;
     [SerializeField] private RectTransform choicePanelRoot;
     [SerializeField] private Image choicesBackground;
     [SerializeField] private TMP_Text choicesPromptText;
     [SerializeField] private RectTransform choicesContainer;
-    [SerializeField] private GameObject choiceButtonPrefab;
-
-    private const float DialoguePanelWidth = 1600f;
-    private const float DialoguePanelHeight = 420f;
-    private const float DialogueHorizontalPadding = 100f;
-    private const float DialogueVerticalPadding = 60f;
-    private const float DialogueSpeakerPlateWidth = 360f;
-    private const float DialogueSpeakerPlateHeight = 58f;
-    private const float DialogueSpeakerGap = 30f;
-    private const float PortraitFrameSize = 360f;
-    private const float PortraitBrassBorder = 12f;
-    private const float PortraitMatteBorder = 20f;
 
     private readonly List<ChoiceRow> _choiceRows = new List<ChoiceRow>();
     private UiTheme _theme;
@@ -67,8 +54,13 @@ public sealed class DialogueCanvasView : MonoBehaviour
         _theme = theme != null ? theme : UiTheme.CreateRuntimeDefault();
         _theme.EnsureRuntimeDefaults();
 
-        EnsureReferences();
-        ApplyTheme();
+        RectTransform root = transform as RectTransform;
+        if (root != null)
+        {
+            UiFactory.Stretch(root);
+        }
+
+        BuildLayout();
         HideDialogue();
         HideChoices();
         HidePortrait();
@@ -78,43 +70,22 @@ public sealed class DialogueCanvasView : MonoBehaviour
 
     public void ShowDialogue(string speakerName, string body, string continueHint)
     {
-        if (!_initialized || dialogueCanvasGroup == null)
+        if (!_initialized || dialogueCanvasGroup == null || dialoguePanelRoot == null)
         {
             return;
         }
 
         SetCanvasGroup(dialogueCanvasGroup, true);
-        if (dialoguePanelRoot != null)
-        {
-            dialoguePanelRoot.gameObject.SetActive(true);
-        }
+        dialoguePanelRoot.gameObject.SetActive(true);
 
         bool hasSpeaker = !string.IsNullOrWhiteSpace(speakerName);
-        if (speakerNamePlate != null)
-        {
-            speakerNamePlate.gameObject.SetActive(hasSpeaker);
-        }
+        speakerNamePlate.gameObject.SetActive(hasSpeaker);
+        speakerNameText.text = hasSpeaker ? speakerName.Trim() : string.Empty;
+        dialogueText.text = string.IsNullOrWhiteSpace(body) ? "..." : body.Trim();
+        hintText.text = string.IsNullOrWhiteSpace(continueHint) ? string.Empty : continueHint.Trim();
 
-        if (speakerNameText != null)
-        {
-            string trimmedSpeakerName = speakerName.Trim();
-            bool useDisplayFont = ShouldUseDisplayFont(trimmedSpeakerName);
-            speakerNameText.font = UiFactory.GetOrCreateDefaultTmpFont(useDisplayFont ? _theme.DisplayFont : _theme.BodyFont);
-            speakerNameText.characterSpacing = useDisplayFont ? 5f : 0f;
-            speakerNameText.text = hasSpeaker ? FormatSpeakerName(trimmedSpeakerName) : string.Empty;
-        }
-
-        if (dialogueText != null)
-        {
-            dialogueText.text = string.IsNullOrWhiteSpace(body) ? "..." : body.Trim();
-        }
-
-        if (hintText != null)
-        {
-            hintText.text = string.IsNullOrWhiteSpace(continueHint) ? string.Empty : continueHint.Trim();
-        }
-
-        RefreshDialogueLayout();
+        float bodyHeight = Mathf.Clamp(dialogueText.preferredHeight, 90f, 170f);
+        dialoguePanelRoot.sizeDelta = new Vector2(dialoguePanelRoot.sizeDelta.x, bodyHeight + 158f);
     }
 
     public void ShowDialogue(string speaker, string text, Sprite portrait = null)
@@ -134,6 +105,10 @@ public sealed class DialogueCanvasView : MonoBehaviour
         }
 
         SetCanvasGroup(dialogueCanvasGroup, false);
+        if (dialoguePanelRoot != null)
+        {
+            dialoguePanelRoot.gameObject.SetActive(false);
+        }
     }
 
     public void ShowChoices(IReadOnlyList<DialogueChoice> choices, int selectedIndex)
@@ -151,40 +126,33 @@ public sealed class DialogueCanvasView : MonoBehaviour
 
         SetCanvasGroup(choicesCanvasGroup, true);
         choicePanelRoot.gameObject.SetActive(true);
-
-        if (choicesPromptText != null)
-        {
-            choicesPromptText.text = "选择你的回应";
-        }
+        choicesPromptText.text = "选择你的回应";
 
         EnsureChoiceRows(choices.Count);
 
-        float panelHeight = Mathf.Clamp(choices.Count * 54f + 34f, 108f, 248f);
+        float panelHeight = Mathf.Clamp(choices.Count * 86f + 96f, 180f, 430f);
         choicePanelRoot.sizeDelta = new Vector2(choicePanelRoot.sizeDelta.x, panelHeight);
 
         for (int i = 0; i < _choiceRows.Count; i++)
         {
+            ChoiceRow row = _choiceRows[i];
             bool shouldShow = i < choices.Count;
-            _choiceRows[i].Root.SetActive(shouldShow);
+            row.Root.SetActive(shouldShow);
             if (!shouldShow)
             {
                 continue;
             }
 
             bool isSelected = i == selectedIndex;
-            _choiceRows[i].Background.color = isSelected ? _theme.ChoiceSelected : _theme.ChoiceIdle;
-            _choiceRows[i].Label.fontStyle = isSelected ? FontStyles.Bold : FontStyles.Normal;
-            _choiceRows[i].Label.color = isSelected ? _theme.WaxWhiteText : _theme.SecondaryText;
-            _choiceRows[i].Label.text = isSelected
-                ? $"> {i + 1}. {choices[i].ChoiceText}"
-                : $"  {i + 1}. {choices[i].ChoiceText}";
+            row.Background.color = isSelected
+                ? new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.3f)
+                : new Color(1f, 1f, 1f, 0.05f);
+            row.Label.color = isSelected ? _theme.PrimaryText : _theme.SecondaryText;
+            row.Label.text = (isSelected ? "> " : string.Empty) + choices[i].ChoiceText;
 
-            if (_choiceRows[i].Button != null)
-            {
-                _choiceRows[i].Button.onClick.RemoveAllListeners();
-                int capturedIndex = i;
-                _choiceRows[i].Button.onClick.AddListener(() => DialogueRunner.Instance?.SelectChoice(capturedIndex));
-            }
+            row.Button.onClick.RemoveAllListeners();
+            int capturedIndex = i;
+            row.Button.onClick.AddListener(() => DialogueRunner.Instance?.SelectChoice(capturedIndex));
         }
 
         LayoutRebuilder.ForceRebuildLayoutImmediate(choicesContainer);
@@ -212,52 +180,18 @@ public sealed class DialogueCanvasView : MonoBehaviour
         }
 
         portraitRoot.SetActive(true);
-        if (portraitFrameDecoration != null)
-        {
-            portraitFrameDecoration.color = _theme.MutedBrass;
-        }
-
-        if (portraitMatteFill != null)
-        {
-            portraitMatteFill.color = new Color(_theme.Slate.r, _theme.Slate.g, _theme.Slate.b, 0.94f);
-        }
-
-        if (portraitBackdrop != null)
-        {
-            portraitBackdrop.color = backgroundColor.a > 0f ? backgroundColor : _theme.PanelInner;
-        }
-
-        if (portraitImage != null)
-        {
-            portraitImage.texture = portraitTexture;
-            portraitImage.gameObject.SetActive(portraitTexture != null);
-        }
+        portraitBackdrop.color = backgroundColor.a > 0f ? backgroundColor : _theme.Slate;
+        portraitImage.texture = portraitTexture;
+        portraitImage.gameObject.SetActive(portraitTexture != null);
+        portraitPlaceholderText.gameObject.SetActive(portraitTexture == null);
+        portraitNamePlate.gameObject.SetActive(!string.IsNullOrWhiteSpace(displayName));
+        portraitNameText.text = string.IsNullOrWhiteSpace(displayName) ? string.Empty : displayName.Trim();
 
         if (portraitAspectFitter != null)
         {
             portraitAspectFitter.aspectRatio = portraitTexture != null && portraitTexture.height > 0
                 ? portraitTexture.width / (float)portraitTexture.height
                 : 1f;
-        }
-
-        if (portraitPlaceholderText != null)
-        {
-            portraitPlaceholderText.gameObject.SetActive(portraitTexture == null);
-        }
-
-        bool hasName = !string.IsNullOrWhiteSpace(displayName);
-        if (portraitNamePlate != null)
-        {
-            portraitNamePlate.gameObject.SetActive(hasName);
-        }
-
-        if (portraitNameText != null)
-        {
-            string trimmedDisplayName = hasName ? displayName.Trim() : string.Empty;
-            bool useDisplayFont = ShouldUseDisplayFont(trimmedDisplayName);
-            portraitNameText.font = UiFactory.GetOrCreateDefaultTmpFont(useDisplayFont ? _theme.DisplayFont : _theme.BodyFont);
-            portraitNameText.characterSpacing = useDisplayFont ? 2f : 0f;
-            portraitNameText.text = trimmedDisplayName;
         }
     }
 
@@ -269,343 +203,93 @@ public sealed class DialogueCanvasView : MonoBehaviour
         }
     }
 
-    private void EnsureReferences()
+    private void BuildLayout()
     {
-        if (dialogueCanvasGroup != null
-            && dialogueText != null
-            && speakerNameText != null
-            && choicesContainer != null
-            && portraitImage != null)
-        {
-            return;
-        }
-
-        BuildRuntimeFallback();
-    }
-
-    private void ApplyTheme()
-    {
-        TMP_FontAsset bodyFont = UiFactory.GetOrCreateDefaultTmpFont(_theme.BodyFont);
-        TMP_FontAsset displayFont = UiFactory.GetOrCreateDefaultTmpFont(_theme.DisplayFont);
-
-        if (dialogueText != null)
-        {
-            dialogueText.font = bodyFont;
-            dialogueText.color = _theme.WaxWhiteTextSoft;
-            dialogueText.fontSize = 36f;
-            dialogueText.lineSpacing = 14f;
-            dialogueText.margin = Vector4.zero;
-            dialogueText.textWrappingMode = TextWrappingModes.Normal;
-            UiFactory.RefreshTextMaterial(dialogueText, false);
-        }
-
-        if (speakerNamePlate != null)
-        {
-            speakerNamePlate.color = new Color(_theme.Charcoal.r, _theme.Charcoal.g, _theme.Charcoal.b, 0.74f);
-        }
-
-        if (speakerNameText != null)
-        {
-            speakerNameText.font = displayFont;
-            speakerNameText.fontStyle = FontStyles.Normal;
-            speakerNameText.color = _theme.MutedBrass;
-            speakerNameText.fontSize = 42f;
-            speakerNameText.characterSpacing = 5f;
-            UiFactory.RefreshTextMaterial(speakerNameText, true);
-        }
-
-        if (hintText != null)
-        {
-            hintText.font = bodyFont;
-            hintText.color = new Color(_theme.SecondaryText.r, _theme.SecondaryText.g, _theme.SecondaryText.b, 0.88f);
-            hintText.fontSize = 16f;
-            UiFactory.RefreshTextMaterial(hintText, false);
-        }
-
-        if (choicesPromptText != null)
-        {
-            choicesPromptText.font = bodyFont;
-            choicesPromptText.color = _theme.SecondaryText;
-            UiFactory.RefreshTextMaterial(choicesPromptText, false);
-        }
-
-        if (portraitFrameDecoration != null)
-        {
-            portraitFrameDecoration.color = _theme.MutedBrass;
-        }
-
-        if (portraitMatteFill != null)
-        {
-            portraitMatteFill.color = new Color(_theme.Slate.r, _theme.Slate.g, _theme.Slate.b, 0.94f);
-        }
-
-        if (portraitBackdrop != null)
-        {
-            portraitBackdrop.color = _theme.PanelInner;
-        }
-
-        if (portraitNameText != null)
-        {
-            portraitNameText.font = displayFont;
-            portraitNameText.fontStyle = FontStyles.Normal;
-            portraitNameText.color = _theme.Charcoal;
-            portraitNameText.fontSize = 18f;
-            portraitNameText.characterSpacing = 2f;
-            UiFactory.RefreshTextMaterial(portraitNameText, true);
-        }
-
-        if (portraitPlaceholderText != null)
-        {
-            portraitPlaceholderText.font = displayFont;
-            portraitPlaceholderText.color = _theme.SecondaryText;
-            UiFactory.RefreshTextMaterial(portraitPlaceholderText, true);
-        }
-    }
-
-    private void RefreshDialogueLayout()
-    {
-        if (dialoguePanelRoot == null || dialogueText == null)
-        {
-            return;
-        }
-
-        dialoguePanelRoot.sizeDelta = new Vector2(DialoguePanelWidth, DialoguePanelHeight);
-
-        LayoutRebuilder.ForceRebuildLayoutImmediate(dialoguePanelRoot);
-        LayoutRebuilder.ForceRebuildLayoutImmediate(dialogueText.rectTransform);
-        Canvas.ForceUpdateCanvases();
-        if (dialogueBodyScroll != null)
-        {
-            dialogueBodyScroll.verticalNormalizedPosition = 1f;
-        }
-    }
-
-    private void EnsureChoiceRows(int count)
-    {
-        while (_choiceRows.Count < count)
-        {
-            _choiceRows.Add(CreateChoiceRow(_choiceRows.Count));
-        }
-    }
-
-    private ChoiceRow CreateChoiceRow(int index)
-    {
-        if (choiceButtonPrefab != null)
-        {
-            GameObject instance = Instantiate(choiceButtonPrefab, choicesContainer);
-            instance.name = $"ChoiceRow_{index + 1}";
-
-            Image background = instance.GetComponent<Image>();
-            if (background == null)
-            {
-                background = instance.GetComponentInChildren<Image>(true);
-            }
-
-            Button button = instance.GetComponent<Button>();
-            TMP_Text label = instance.GetComponentInChildren<TMP_Text>(true);
-
-            if (background == null)
-            {
-                background = instance.AddComponent<Image>();
-                background.sprite = null;
-            }
-
-            if (button == null)
-            {
-                button = instance.AddComponent<Button>();
-                button.targetGraphic = background;
-            }
-
-            if (label == null)
-            {
-                RectTransform labelRect = UiFactory.CreateRect("Label", instance.transform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-24f, -12f), Vector2.zero);
-                label = labelRect.gameObject.AddComponent<TextMeshProUGUI>();
-                label.alignment = TextAlignmentOptions.MidlineLeft;
-            }
-
-            StyleChoiceLabel(label);
-
-            return new ChoiceRow
-            {
-                Root = instance,
-                Background = background,
-                Button = button,
-                Label = label
-            };
-        }
-
-        Image backgroundFallback = UiFactory.CreateImage(
-            $"ChoiceRow_{index + 1}",
-            choicesContainer,
-            new Vector2(0f, 0.5f),
-            new Vector2(1f, 0.5f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0f, 48f),
-            Vector2.zero,
-            _theme.ChoiceIdle);
-
-        LayoutElement layoutElement = backgroundFallback.gameObject.AddComponent<LayoutElement>();
-        layoutElement.preferredHeight = 48f;
-
-        Button fallbackButton = backgroundFallback.gameObject.AddComponent<Button>();
-        fallbackButton.targetGraphic = backgroundFallback;
-
-        TMP_Text fallbackLabel = UiFactory.CreateText(
-            "Label",
-            backgroundFallback.transform,
-            Vector2.zero,
-            Vector2.one,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(-24f, -12f),
-            Vector2.zero,
-            _theme.BodyFont,
-            16,
-            FontStyle.Normal,
-            TextAnchor.MiddleLeft,
-            _theme.SecondaryText);
-        StyleChoiceLabel(fallbackLabel);
-
-        return new ChoiceRow
-        {
-            Root = backgroundFallback.gameObject,
-            Background = backgroundFallback,
-            Label = fallbackLabel,
-            Button = fallbackButton
-        };
-    }
-
-    private void BuildRuntimeFallback()
-    {
-        RectTransform root = transform as RectTransform;
-        if (root != null)
-        {
-            UiFactory.Stretch(root);
-        }
-
         dialoguePanelRoot = UiFactory.CreateRect(
             "DialoguePanel",
             transform,
             new Vector2(0.5f, 0f),
             new Vector2(0.5f, 0f),
             new Vector2(0.5f, 0f),
-            new Vector2(DialoguePanelWidth, DialoguePanelHeight),
-            new Vector2(0f, 22f));
+            new Vector2(1440f, 310f),
+            new Vector2(0f, 24f));
         dialogueCanvasGroup = UiFactory.GetOrAddCanvasGroup(dialoguePanelRoot.gameObject);
-        CreatePanelShadow(dialoguePanelRoot, new Vector2(18f, -18f), new Vector2(26f, 24f), new Color(0f, 0f, 0f, 0.3f));
 
-        dialogueBackground = UiFactory.CreateImage(
-            "DialogueOuter",
-            dialoguePanelRoot,
-            Vector2.zero,
-            Vector2.one,
-            new Vector2(0.5f, 0.5f),
-            Vector2.zero,
-            Vector2.zero,
-            _theme.SootBlackBase);
-        Sprite dialogueFrameSprite = _theme.DialogueFrameSprite;
-        if (dialogueFrameSprite != null)
-        {
-            UiFactory.ApplySprite(dialogueBackground, dialogueFrameSprite);
-            dialogueBackground.color = Color.white;
-        }
+        UiFactory.CreateImage("DialogueShadow", dialoguePanelRoot, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(26f, 26f), new Vector2(18f, -18f), new Color(0f, 0f, 0f, 0.34f));
+        dialogueBackground = UiFactory.CreateImage("DialogueOuter", dialoguePanelRoot, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.03f, 0.04f, 0.06f, 0.94f));
+        RectTransform dialogueInner = UiFactory.CreateRect("DialogueInner", dialoguePanelRoot, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-14f, -14f), Vector2.zero);
+        UiFactory.CreateImage("DialogueFill", dialogueInner, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.08f, 0.1f, 0.14f, 0.96f));
+        UiFactory.CreateImage("Accent", dialogueInner, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f), new Vector2(3f, -26f), Vector2.zero, new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.88f));
 
-        RectTransform dialogueInner = UiFactory.CreateRect(
-            "DialogueInner",
-            dialoguePanelRoot,
-            Vector2.zero,
-            Vector2.one,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(-10f, -10f),
-            Vector2.zero);
-        UiFactory.CreateImage("DialogueInnerFill", dialogueInner, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, _theme.PanelInner);
-        CreateAccentLine(dialogueInner, 16f);
-        CreateLeftAccent(dialogueInner, 10f);
-        CreateCornerBrackets(dialogueInner, 12f, 16f);
-
-        RectTransform dialogueContent = UiFactory.CreateRect(
-            "DialogueContent",
-            dialogueInner,
-            Vector2.zero,
-            Vector2.one,
-            new Vector2(0.5f, 0.5f),
-            Vector2.zero,
-            Vector2.zero);
-        ApplyStretchInsets(dialogueContent, DialogueHorizontalPadding, DialogueVerticalPadding, DialogueHorizontalPadding, DialogueVerticalPadding);
+        BuildPortrait(dialogueInner);
 
         speakerNamePlate = UiFactory.CreateImage(
-            "SpeakerTag",
-            dialogueContent,
+            "SpeakerPlate",
+            dialogueInner,
             new Vector2(0f, 1f),
             new Vector2(0f, 1f),
             new Vector2(0f, 1f),
-            new Vector2(DialogueSpeakerPlateWidth, DialogueSpeakerPlateHeight),
-            Vector2.zero,
-            new Color(_theme.Charcoal.r, _theme.Charcoal.g, _theme.Charcoal.b, 0.74f));
-
+            new Vector2(260f, 40f),
+            new Vector2(306f, -28f),
+            new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.18f));
         speakerNameText = UiFactory.CreateText(
-            "SpeakerText",
+            "SpeakerName",
             speakerNamePlate.transform,
             Vector2.zero,
             Vector2.one,
             new Vector2(0.5f, 0.5f),
-            new Vector2(-36f, -12f),
+            new Vector2(-22f, -10f),
             Vector2.zero,
             _theme.DisplayFont,
-            42,
-            FontStyle.Normal,
+            16,
+            FontStyle.Bold,
             TextAnchor.MiddleLeft,
-            _theme.Charcoal);
+            _theme.Brass);
+        speakerNameText.characterSpacing = 3f;
 
-        Image bodyViewport = UiFactory.CreateImage(
-            "BodyViewport",
-            dialogueContent,
-            new Vector2(0f, 0f),
+        TMP_Text chapterText = UiFactory.CreateText(
+            "ChapterTag",
+            dialogueInner,
             new Vector2(1f, 1f),
-            new Vector2(0.5f, 0.5f),
-            Vector2.zero,
-            Vector2.zero,
-            new Color(0f, 0f, 0f, 0.001f));
-        ApplyStretchInsets(bodyViewport.rectTransform, 0f, DialogueSpeakerPlateHeight + DialogueSpeakerGap, 0f, 0f);
-        bodyViewport.maskable = true;
-        Mask bodyMask = bodyViewport.gameObject.AddComponent<Mask>();
-        bodyMask.showMaskGraphic = false;
-
-        dialogueBodyScroll = bodyViewport.gameObject.AddComponent<ScrollRect>();
-        dialogueBodyScroll.horizontal = false;
-        dialogueBodyScroll.movementType = ScrollRect.MovementType.Clamped;
-        dialogueBodyScroll.scrollSensitivity = 26f;
-        dialogueBodyScroll.viewport = bodyViewport.rectTransform;
+            new Vector2(1f, 1f),
+            new Vector2(1f, 1f),
+            new Vector2(200f, 24f),
+            new Vector2(-24f, -28f),
+            _theme.DisplayFont,
+            12,
+            FontStyle.Normal,
+            TextAnchor.MiddleRight,
+            new Color(_theme.PrimaryText.r, _theme.PrimaryText.g, _theme.PrimaryText.b, 0.56f));
+        chapterText.gameObject.SetActive(false);
 
         dialogueText = UiFactory.CreateText(
-            "BodyText",
-            bodyViewport.transform,
-            new Vector2(0f, 1f),
+            "DialogueText",
+            dialogueInner,
+            new Vector2(0f, 0f),
             new Vector2(1f, 1f),
-            new Vector2(0.5f, 1f),
-            new Vector2(0f, 0f),
-            new Vector2(0f, 0f),
+            new Vector2(0f, 1f),
+            new Vector2(-346f, -126f),
+            new Vector2(306f, -76f),
             _theme.BodyFont,
-            36,
+            25,
             FontStyle.Normal,
             TextAnchor.UpperLeft,
-            _theme.WaxWhiteTextSoft,
-            true);
-        dialogueText.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-        dialogueBodyScroll.content = dialogueText.rectTransform;
+            _theme.PrimaryText);
+        dialogueText.lineSpacing = 10f;
 
         hintText = UiFactory.CreateText(
             "HintText",
             dialogueInner,
             new Vector2(0f, 0f),
             new Vector2(1f, 0f),
-            new Vector2(0.5f, 0f),
-            new Vector2(-(DialogueHorizontalPadding * 2f), 24f),
-            new Vector2(0f, 30f),
+            new Vector2(1f, 0f),
+            new Vector2(520f, 26f),
+            new Vector2(-26f, 22f),
             _theme.BodyFont,
-            16,
+            14,
             FontStyle.Normal,
             TextAnchor.MiddleRight,
-            _theme.SecondaryText);
+            new Color(_theme.PrimaryText.r, _theme.PrimaryText.g, _theme.PrimaryText.b, 0.72f));
 
         choicePanelRoot = UiFactory.CreateRect(
             "ChoicePanel",
@@ -613,341 +297,178 @@ public sealed class DialogueCanvasView : MonoBehaviour
             new Vector2(1f, 0f),
             new Vector2(1f, 0f),
             new Vector2(1f, 0f),
-            new Vector2(520f, 192f),
-            new Vector2(-24f, 288f));
+            new Vector2(480f, 268f),
+            new Vector2(-24f, 352f));
         choicesCanvasGroup = UiFactory.GetOrAddCanvasGroup(choicePanelRoot.gameObject);
-        CreatePanelShadow(choicePanelRoot, new Vector2(16f, -16f), new Vector2(24f, 24f), new Color(0f, 0f, 0f, 0.28f));
-
-        choicesBackground = UiFactory.CreateImage(
-            "ChoiceOuter",
-            choicePanelRoot,
-            Vector2.zero,
-            Vector2.one,
-            new Vector2(0.5f, 0.5f),
-            Vector2.zero,
-            Vector2.zero,
-            _theme.SootBlackBase);
-        Sprite choicePanelSprite = _theme.ChoicePanelSprite;
-        if (choicePanelSprite != null)
-        {
-            UiFactory.ApplySprite(choicesBackground, choicePanelSprite);
-            choicesBackground.color = Color.white;
-        }
-
-        RectTransform choiceInner = UiFactory.CreateRect(
-            "ChoiceInner",
-            choicePanelRoot,
-            Vector2.zero,
-            Vector2.one,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(-10f, -10f),
-            Vector2.zero);
-        UiFactory.CreateImage("ChoiceInnerFill", choiceInner, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.1f, 0.12f, 0.15f, 0.74f));
-        CreateAccentLine(choiceInner, 14f);
-        CreateCornerBrackets(choiceInner, 10f, 14f);
+        UiFactory.CreateImage("ChoiceShadow", choicePanelRoot, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(22f, 22f), new Vector2(14f, -14f), new Color(0f, 0f, 0f, 0.28f));
+        choicesBackground = UiFactory.CreateImage("ChoiceOuter", choicePanelRoot, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.04f, 0.05f, 0.07f, 0.92f));
+        RectTransform choiceInner = UiFactory.CreateRect("ChoiceInner", choicePanelRoot, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-12f, -12f), Vector2.zero);
+        UiFactory.CreateImage("ChoiceFill", choiceInner, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.08f, 0.1f, 0.14f, 0.96f));
+        UiFactory.CreateImage("ChoiceAccent", choiceInner, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f), new Vector2(3f, -24f), Vector2.zero, new Color(_theme.Moss.r, _theme.Moss.g, _theme.Moss.b, 0.9f));
 
         choicesPromptText = UiFactory.CreateText(
-            "ChoicePromptText",
+            "ChoicesPrompt",
             choiceInner,
             new Vector2(0f, 1f),
             new Vector2(1f, 1f),
-            new Vector2(0.5f, 1f),
-            new Vector2(-32f, 28f),
-            new Vector2(0f, -10f),
-            _theme.BodyFont,
-            13,
-            FontStyle.Italic,
+            new Vector2(0f, 1f),
+            new Vector2(-36f, 26f),
+            new Vector2(18f, -18f),
+            _theme.DisplayFont,
+            14,
+            FontStyle.Bold,
             TextAnchor.MiddleLeft,
-            _theme.SecondaryText);
+            _theme.Brass);
+        choicesPromptText.characterSpacing = 5f;
 
         choicesContainer = UiFactory.CreateRect(
-            "ChoiceRows",
+            "ChoicesContainer",
             choiceInner,
-            new Vector2(0f, 0f),
-            new Vector2(1f, 1f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(-24f, -44f),
-            new Vector2(0f, -10f));
-        VerticalLayoutGroup choiceLayout = choicesContainer.gameObject.AddComponent<VerticalLayoutGroup>();
-        choiceLayout.spacing = 8f;
-        choiceLayout.childControlHeight = false;
-        choiceLayout.childControlWidth = true;
-        choiceLayout.childForceExpandHeight = false;
-        choiceLayout.childForceExpandWidth = true;
-        choiceLayout.padding = new RectOffset(0, 0, 26, 0);
-
-        RectTransform portraitPanel = UiFactory.CreateRect(
-            "PortraitPanel",
-            transform,
-            new Vector2(0f, 0f),
-            new Vector2(0f, 0f),
-            new Vector2(0f, 0f),
-            new Vector2(PortraitFrameSize, PortraitFrameSize),
-            new Vector2(28f, 250f));
-        portraitRoot = portraitPanel.gameObject;
-        CreatePanelShadow(portraitPanel, new Vector2(14f, -14f), new Vector2(18f, 18f), new Color(0f, 0f, 0f, 0.26f));
-
-        portraitFrameDecoration = UiFactory.CreateImage(
-            "PortraitFrame",
-            portraitPanel,
-            Vector2.zero,
-            Vector2.one,
-            new Vector2(0.5f, 0.5f),
-            Vector2.zero,
-            Vector2.zero,
-            _theme.MutedBrass);
-        Sprite portraitFrameSprite = _theme.PortraitFrameSprite;
-        if (portraitFrameSprite != null)
-        {
-            UiFactory.ApplySprite(portraitFrameDecoration, portraitFrameSprite);
-            portraitFrameDecoration.color = Color.white;
-        }
-
-        portraitMatteFill = UiFactory.CreateImage(
-            "PortraitMatte",
-            portraitPanel,
-            Vector2.zero,
-            Vector2.one,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(-(PortraitBrassBorder * 2f), -(PortraitBrassBorder * 2f)),
-            Vector2.zero,
-            new Color(0.08f, 0.09f, 0.12f, 0.94f));
-
-        portraitBackdrop = UiFactory.CreateImage(
-            "PortraitBackdrop",
-            portraitMatteFill.transform,
-            Vector2.zero,
-            Vector2.one,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(-(PortraitMatteBorder * 2f), -(PortraitMatteBorder * 2f)),
-            Vector2.zero,
-            _theme.PanelInner);
-        CreateAccentLine(portraitPanel, 0f);
-        CreateCornerBrackets(portraitPanel, 10f, 12f);
-
-        RectTransform portraitImageRect = UiFactory.CreateRect(
-            "PortraitImage",
-            portraitBackdrop.transform,
             Vector2.zero,
             Vector2.one,
             new Vector2(0.5f, 0.5f),
             Vector2.zero,
             Vector2.zero);
-        portraitImage = portraitImageRect.gameObject.AddComponent<RawImage>();
-        portraitImage.raycastTarget = false;
-        portraitImage.color = Color.white;
-        portraitAspectFitter = portraitImageRect.gameObject.AddComponent<AspectRatioFitter>();
-        portraitAspectFitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
-        portraitAspectFitter.aspectRatio = 1f;
+        choicesContainer.offsetMin = new Vector2(18f, 18f);
+        choicesContainer.offsetMax = new Vector2(-18f, -52f);
 
-        portraitPlaceholderText = UiFactory.CreateText(
-            "PortraitPlaceholder",
-            portraitBackdrop.transform,
-            Vector2.zero,
-            Vector2.one,
-            new Vector2(0.5f, 0.5f),
-            Vector2.zero,
-            Vector2.zero,
-            _theme.DisplayFont,
-            32,
-            FontStyle.Bold,
-            TextAnchor.MiddleCenter,
-            _theme.SecondaryText);
-        portraitPlaceholderText.text = "?";
-
-        portraitNamePlate = UiFactory.CreateImage(
-            "PortraitNameTag",
-            portraitPanel,
-            new Vector2(0f, 1f),
-            new Vector2(1f, 1f),
-            new Vector2(0.5f, 0f),
-            new Vector2(-40f, 40f),
-            new Vector2(0f, 12f),
-            _theme.MutedBrass);
-
-        portraitNameText = UiFactory.CreateText(
-            "PortraitNameText",
-            portraitNamePlate.transform,
-            Vector2.zero,
-            Vector2.one,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(-28f, -8f),
-            Vector2.zero,
-            _theme.DisplayFont,
-            18,
-            FontStyle.Normal,
-            TextAnchor.MiddleCenter,
-            _theme.Charcoal);
+        VerticalLayoutGroup layout = choicesContainer.gameObject.AddComponent<VerticalLayoutGroup>();
+        layout.spacing = 10f;
+        layout.childAlignment = TextAnchor.UpperLeft;
+        layout.childControlWidth = true;
+        layout.childControlHeight = false;
+        layout.childForceExpandHeight = false;
+        layout.childForceExpandWidth = true;
     }
 
-    private string FormatSpeakerName(string speakerName)
+    private void BuildPortrait(RectTransform parent)
     {
-        if (string.IsNullOrWhiteSpace(speakerName))
-        {
-            return string.Empty;
-        }
-
-        bool hasLatinLetter = false;
-        for (int i = 0; i < speakerName.Length; i++)
-        {
-            char c = speakerName[i];
-            if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
-            {
-                hasLatinLetter = true;
-                continue;
-            }
-
-            if (char.IsWhiteSpace(c) || char.IsDigit(c) || c == '\'' || c == '-' || c == '_')
-            {
-                continue;
-            }
-
-            return speakerName;
-        }
-
-        return hasLatinLetter ? speakerName.ToUpperInvariant() : speakerName;
-    }
-
-    private static bool ShouldUseDisplayFont(string text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return false;
-        }
-
-        bool hasLatinLetter = false;
-        for (int i = 0; i < text.Length; i++)
-        {
-            char c = text[i];
-            if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
-            {
-                hasLatinLetter = true;
-                continue;
-            }
-
-            if (char.IsWhiteSpace(c) || char.IsDigit(c) || c == '\'' || c == '-' || c == '_')
-            {
-                continue;
-            }
-
-            return false;
-        }
-
-        return hasLatinLetter;
-    }
-
-    private void SetCanvasGroup(CanvasGroup group, bool visible)
-    {
-        if (group == null)
-        {
-            return;
-        }
-
-        group.alpha = visible ? 1f : 0f;
-        group.interactable = visible;
-        group.blocksRaycasts = visible;
-    }
-
-    private void CreateAccentLine(Transform parent, float inset)
-    {
-        Image line = UiFactory.CreateImage(
-            "AccentLine",
-            parent,
-            new Vector2(0f, 1f),
-            new Vector2(1f, 1f),
-            new Vector2(0.5f, 1f),
-            new Vector2(-(inset * 2f), 2f),
-            new Vector2(0f, -1f),
-            new Color(_theme.MutedBrass.r, _theme.MutedBrass.g, _theme.MutedBrass.b, 0.72f));
-        line.raycastTarget = false;
-    }
-
-    private void CreateLeftAccent(Transform parent, float inset)
-    {
-        Image line = UiFactory.CreateImage(
-            "LeftAccent",
+        RectTransform portraitFrame = UiFactory.CreateRect(
+            "PortraitFrame",
             parent,
             new Vector2(0f, 0f),
             new Vector2(0f, 1f),
             new Vector2(0f, 0.5f),
-            new Vector2(2f, -20f),
-            new Vector2(inset, 0f),
-            new Color(_theme.MutedBrass.r, _theme.MutedBrass.g, _theme.MutedBrass.b, 0.52f));
-        line.raycastTarget = false;
-    }
+            new Vector2(258f, -42f),
+            new Vector2(20f, 0f));
+        portraitRoot = portraitFrame.gameObject;
 
-    private void CreatePanelShadow(RectTransform panel, Vector2 offset, Vector2 expand, Color color)
-    {
-        Image shadow = UiFactory.CreateImage(
-            "PanelShadow",
-            panel,
+        portraitFrameDecoration = UiFactory.CreateImage("PortraitOuter", portraitFrame, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.32f));
+        portraitMatteFill = UiFactory.CreateImage("PortraitFrameFill", portraitFrame, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-8f, -8f), Vector2.zero, new Color(0.09f, 0.1f, 0.12f, 0.95f));
+
+        RectTransform artworkMask = UiFactory.CreateRect(
+            "PortraitArtworkMask",
+            portraitFrame,
+            new Vector2(0.5f, 0.5f),
+            new Vector2(0.5f, 0.5f),
+            new Vector2(0.5f, 0.5f),
+            new Vector2(214f, 214f),
+            new Vector2(0f, 6f));
+        Image mask = artworkMask.gameObject.AddComponent<Image>();
+        mask.color = Color.white;
+        Mask uiMask = artworkMask.gameObject.AddComponent<Mask>();
+        uiMask.showMaskGraphic = false;
+
+        portraitBackdrop = UiFactory.CreateImage("PortraitBackdrop", artworkMask, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.14f, 0.16f, 0.2f, 0.94f));
+        portraitImage = UiFactory.CreateRect("PortraitImage", artworkMask, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero).gameObject.AddComponent<RawImage>();
+        portraitImage.color = Color.white;
+        portraitAspectFitter = portraitImage.gameObject.AddComponent<AspectRatioFitter>();
+        portraitAspectFitter.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
+        portraitAspectFitter.aspectRatio = 1f;
+
+        portraitPlaceholderText = UiFactory.CreateText(
+            "PortraitPlaceholder",
+            artworkMask,
             Vector2.zero,
             Vector2.one,
             new Vector2(0.5f, 0.5f),
-            expand,
-            offset,
-            color);
-        shadow.raycastTarget = false;
-        shadow.transform.SetAsFirstSibling();
+            new Vector2(-30f, -30f),
+            Vector2.zero,
+            _theme.DisplayFont,
+            18,
+            FontStyle.Bold,
+            TextAnchor.MiddleCenter,
+            new Color(_theme.PrimaryText.r, _theme.PrimaryText.g, _theme.PrimaryText.b, 0.5f));
+        portraitPlaceholderText.text = string.Empty;
+        portraitPlaceholderText.alignment = TextAlignmentOptions.Center;
+
+        portraitNamePlate = UiFactory.CreateImage(
+            "PortraitNamePlate",
+            portraitFrame,
+            new Vector2(0.5f, 0f),
+            new Vector2(0.5f, 0f),
+            new Vector2(0.5f, 0f),
+            new Vector2(206f, 34f),
+            new Vector2(0f, 18f),
+            new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.18f));
+        portraitNameText = UiFactory.CreateText(
+            "PortraitName",
+            portraitNamePlate.transform,
+            Vector2.zero,
+            Vector2.one,
+            new Vector2(0.5f, 0.5f),
+            new Vector2(-20f, -8f),
+            Vector2.zero,
+            _theme.DisplayFont,
+            14,
+            FontStyle.Bold,
+            TextAnchor.MiddleCenter,
+            _theme.PrimaryText);
     }
 
-    private void StyleChoiceLabel(TMP_Text label)
+    private void EnsureChoiceRows(int requiredCount)
     {
-        if (label == null)
+        while (_choiceRows.Count < requiredCount)
         {
-            return;
+            _choiceRows.Add(CreateChoiceRow(_choiceRows.Count));
         }
+    }
 
-        label.font = UiFactory.GetOrCreateDefaultTmpFont(_theme.BodyFont);
-        label.fontSize = 16f;
-        label.color = _theme.SecondaryText;
+    private ChoiceRow CreateChoiceRow(int index)
+    {
+        RectTransform rowRoot = UiFactory.CreateRect(
+            "ChoiceRow_" + index,
+            choicesContainer,
+            new Vector2(0f, 1f),
+            new Vector2(1f, 1f),
+            new Vector2(0.5f, 1f),
+            new Vector2(0f, 76f),
+            Vector2.zero);
+        LayoutElement layoutElement = rowRoot.gameObject.AddComponent<LayoutElement>();
+        layoutElement.preferredHeight = 76f;
+
+        Image background = UiFactory.CreateImage("Background", rowRoot, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(1f, 1f, 1f, 0.05f));
+        Button button = rowRoot.gameObject.AddComponent<Button>();
+        button.targetGraphic = background;
+
+        TMP_Text label = UiFactory.CreateText(
+            "Label",
+            rowRoot,
+            Vector2.zero,
+            Vector2.one,
+            new Vector2(0.5f, 0.5f),
+            new Vector2(-28f, -18f),
+            Vector2.zero,
+            _theme.BodyFont,
+            19,
+            FontStyle.Normal,
+            TextAnchor.MiddleLeft,
+            _theme.SecondaryText);
         label.textWrappingMode = TextWrappingModes.Normal;
-        label.raycastTarget = false;
-        UiFactory.RefreshTextMaterial(label, false);
-    }
 
-    private static void ApplyStretchInsets(RectTransform rectTransform, float left, float top, float right, float bottom)
-    {
-        if (rectTransform == null)
+        return new ChoiceRow
         {
-            return;
-        }
-
-        rectTransform.offsetMin = new Vector2(left, bottom);
-        rectTransform.offsetMax = new Vector2(-right, -top);
+            Root = rowRoot.gameObject,
+            Background = background,
+            Label = label,
+            Button = button
+        };
     }
 
-    private void CreateCornerBrackets(Transform parent, float inset, float length)
+    private static void SetCanvasGroup(CanvasGroup canvasGroup, bool visible)
     {
-        CreateCornerBracket(parent, "TopLeft", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), inset, -inset, length, 2f);
-        CreateCornerBracket(parent, "TopRight", new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), -inset, -inset, length, 2f);
-        CreateCornerBracket(parent, "BottomLeft", new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(0f, 0f), inset, inset, length, 2f);
-        CreateCornerBracket(parent, "BottomRight", new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(1f, 0f), -inset, inset, length, 2f);
-    }
-
-    private void CreateCornerBracket(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, float x, float y, float length, float thickness)
-    {
-        Color color = new Color(_theme.MutedBrass.r, _theme.MutedBrass.g, _theme.MutedBrass.b, 0.55f);
-        Image horizontal = UiFactory.CreateImage(
-            $"{name}_H",
-            parent,
-            anchorMin,
-            anchorMax,
-            pivot,
-            new Vector2(length, thickness),
-            new Vector2(x, y),
-            color);
-        horizontal.raycastTarget = false;
-
-        Image vertical = UiFactory.CreateImage(
-            $"{name}_V",
-            parent,
-            anchorMin,
-            anchorMax,
-            pivot,
-            new Vector2(thickness, length),
-            new Vector2(x, y),
-            color);
-        vertical.raycastTarget = false;
+        canvasGroup.alpha = visible ? 1f : 0f;
+        canvasGroup.blocksRaycasts = visible;
+        canvasGroup.interactable = visible;
     }
 }

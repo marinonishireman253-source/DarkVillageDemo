@@ -16,8 +16,8 @@ public sealed class MonsterSpriteVisual : MonoBehaviour
     [SerializeField] private float previewAttackDistance = 3.4f;
     [SerializeField] private float previewAttackCooldown = 1.15f;
     [SerializeField] private float attackAnimationDuration = 0.42f;
-    [SerializeField] private float previewMoveSpeed = 1.35f;
-    [SerializeField] private float previewReturnSpeed = 1.8f;
+    [SerializeField] private float previewMoveSpeed = 1.08f;
+    [SerializeField] private float previewReturnSpeed = 1.45f;
     [SerializeField] private float previewMoveRange = 4.4f;
     [SerializeField] private float previewStopDistance = 2.15f;
     [Header("Motion")]

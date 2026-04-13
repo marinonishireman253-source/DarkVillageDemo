@@ -8,6 +8,7 @@ public sealed class UiStateCoordinator : MonoBehaviour
         Exploration,
         InteractionFocus,
         Dialogue,
+        Inventory,
         Combat,
         ChapterComplete,
         Loading,
@@ -65,9 +66,24 @@ public sealed class UiStateCoordinator : MonoBehaviour
             return UiMode.ChapterComplete;
         }
 
+        if (FloorSummaryPanel.IsVisible)
+        {
+            return UiMode.Paused;
+        }
+
+        if (AshParlorChoiceOverlay.IsVisible)
+        {
+            return UiMode.Paused;
+        }
+
         if (SimpleDialogueUI.IsOpen || DialogueRunner.IsActive)
         {
             return UiMode.Dialogue;
+        }
+
+        if (InventoryController.IsOpen)
+        {
+            return UiMode.Inventory;
         }
 
         if (CombatEncounterTrigger.ActiveEncounter != null)

@@ -3,12 +3,19 @@ using UnityEngine;
 public class PickupInteractable : InteractableBase
 {
     [SerializeField] private string itemId = "old_token";
+    [SerializeField] private string inventoryCategory = "遗物";
+    [TextArea(2, 4)]
+    [SerializeField] private string inventoryDescription;
+    [SerializeField] private string pickupSpeaker = "伊尔萨恩";
+    [SerializeField] [TextArea(2, 4)] private string[] pickupLines;
     [SerializeField] private bool destroyOnPickup = true;
     [SerializeField] private bool disableRendererOnPickup = true;
     [SerializeField] private float interactionTriggerRadius = 1.25f;
 
     private bool _picked;
+    private bool _pickupEnabled = true;
 
+    public string ItemId => string.IsNullOrWhiteSpace(itemId) ? string.Empty : itemId.Trim();
     public bool IsCollected => _picked || ChapterState.HasItem(itemId);
 
     private void Awake()
@@ -24,10 +31,19 @@ public class PickupInteractable : InteractableBase
         }
 
         EnsureInteractionTrigger();
+        RegisterInventoryDefinition();
         RefreshCollectedState();
     }
 
-    public void Configure(string newItemId, string newDisplayName, string newPromptText, bool shouldDestroyOnPickup)
+    public void Configure(
+        string newItemId,
+        string newDisplayName,
+        string newPromptText,
+        bool shouldDestroyOnPickup,
+        string newInventoryCategory = null,
+        string newInventoryDescription = null,
+        string newPickupSpeaker = null,
+        string[] newPickupLines = null)
     {
         if (!string.IsNullOrWhiteSpace(newItemId))
         {
@@ -36,12 +52,34 @@ public class PickupInteractable : InteractableBase
 
         ConfigurePresentation(newDisplayName, newPromptText);
         destroyOnPickup = shouldDestroyOnPickup;
+
+        if (!string.IsNullOrWhiteSpace(newInventoryCategory))
+        {
+            inventoryCategory = newInventoryCategory.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(newInventoryDescription))
+        {
+            inventoryDescription = newInventoryDescription.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(newPickupSpeaker))
+        {
+            pickupSpeaker = newPickupSpeaker.Trim();
+        }
+
+        if (newPickupLines != null && newPickupLines.Length > 0)
+        {
+            pickupLines = newPickupLines;
+        }
+
+        RegisterInventoryDefinition();
         RefreshCollectedState();
     }
 
     public override void Interact(PlayerMover player)
     {
-        if (_picked)
+        if (_picked || !_pickupEnabled)
         {
             return;
         }
@@ -70,14 +108,31 @@ public class PickupInteractable : InteractableBase
         Debug.Log($"[PickupInteractable] Picked item: {itemId}");
         ChapterState.CollectItem(itemId);
 
+        if (pickupLines != null && pickupLines.Length > 0 && !SimpleDialogueUI.IsOpen)
+        {
+            SimpleDialogueUI.Instance?.Show(string.IsNullOrWhiteSpace(pickupSpeaker) ? "伊尔萨恩" : pickupSpeaker, pickupLines);
+        }
+
         if (destroyOnPickup)
         {
             Destroy(gameObject);
         }
     }
 
+    public void SetPickupEnabled(bool enabled)
+    {
+        _pickupEnabled = enabled;
+        ApplyCollectedState();
+    }
+
+    public void RefreshFromRuntimeState()
+    {
+        RefreshCollectedState();
+    }
+
     private void Start()
     {
+        RegisterInventoryDefinition();
         RefreshCollectedState();
     }
 
@@ -100,25 +155,41 @@ public class PickupInteractable : InteractableBase
 
     private void RefreshCollectedState()
     {
-        if (!ChapterState.HasItem(itemId))
+        _picked = ChapterState.HasItem(itemId);
+        if (_picked)
         {
-            return;
+            promptText = "已拾取";
         }
 
-        _picked = true;
-        promptText = "已拾取";
+        ApplyCollectedState();
+    }
+
+    private void RegisterInventoryDefinition()
+    {
+        InventoryItemCatalog.RegisterDefinition(itemId, DisplayName, inventoryDescription, inventoryCategory);
+    }
+
+    private void ApplyCollectedState()
+    {
+        bool shouldShowVisual = !_picked && _pickupEnabled;
+        bool shouldEnableColliders = !_picked && _pickupEnabled;
 
         if (disableRendererOnPickup)
         {
             foreach (Renderer renderer in GetComponentsInChildren<Renderer>())
             {
-                renderer.enabled = false;
+                renderer.enabled = shouldShowVisual;
             }
+        }
+
+        foreach (Light lightComponent in GetComponentsInChildren<Light>())
+        {
+            lightComponent.enabled = shouldShowVisual;
         }
 
         foreach (Collider collider in GetComponentsInChildren<Collider>())
         {
-            collider.enabled = false;
+            collider.enabled = shouldEnableColliders;
         }
     }
 }

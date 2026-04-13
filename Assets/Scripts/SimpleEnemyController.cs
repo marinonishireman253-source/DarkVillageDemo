@@ -8,16 +8,19 @@ public class SimpleEnemyController : MonoBehaviour
     [SerializeField] private string enemyName = "仪式回响";
     [SerializeField] private int maxHealth = 3;
     [SerializeField] private int contactDamage = 1;
-    [SerializeField] private float moveSpeed = 2.7f;
+    [SerializeField] private float moveSpeed = 2.15f;
     [SerializeField] private float turnSpeed = 10f;
     [SerializeField] private float attackRange = 1.15f;
     [SerializeField] private float attackCooldown = 1f;
     [SerializeField] private float attackAnimationDuration = 0.42f;
+    [SerializeField] private float attackHitDelay = 0.16f;
+    [SerializeField] private float attackRecoveryDuration = 0.28f;
 
     public string EnemyName => enemyName;
     public CombatantHealth Health { get; private set; }
     public bool IsAlive => Health != null && !Health.IsDead;
     public bool IsMoving => _isMoving;
+    public bool IsEncounterEnabled => _encounterEnabled;
     public float LastAttackStartedAt => _lastAttackStartedAt;
     public float AttackAnimationDuration => attackAnimationDuration;
 
@@ -29,6 +32,14 @@ public class SimpleEnemyController : MonoBehaviour
     private float _nextAttackTime;
     private bool _isMoving;
     private float _lastAttackStartedAt = float.NegativeInfinity;
+    private float _moveSpeedMultiplier = 1f;
+    private float _attackRangeMultiplier = 1f;
+    private float _attackCooldownMultiplier = 1f;
+    private bool _encounterEnabled = true;
+    private bool _attackInProgress;
+    private bool _pendingAttackDamage;
+    private float _attackDamageAt;
+    private float _attackRecoverUntil;
 
     private void Awake()
     {
@@ -80,9 +91,26 @@ public class SimpleEnemyController : MonoBehaviour
         FlashDamageColor();
     }
 
+    public void SetEncounterProfile(float moveSpeedMultiplier, float attackRangeMultiplier, float attackCooldownMultiplier)
+    {
+        _moveSpeedMultiplier = Mathf.Clamp(moveSpeedMultiplier, 0.3f, 3f);
+        _attackRangeMultiplier = Mathf.Clamp(attackRangeMultiplier, 0.5f, 2f);
+        _attackCooldownMultiplier = Mathf.Clamp(attackCooldownMultiplier, 0.35f, 3f);
+    }
+
+    public void SetEncounterEnabled(bool enabled)
+    {
+        _encounterEnabled = enabled;
+
+        if (!enabled)
+        {
+            _isMoving = false;
+        }
+    }
+
     private void Update()
     {
-        if (!IsAlive || SimpleDialogueUI.IsOpen)
+        if (!IsAlive || !_encounterEnabled || SimpleDialogueUI.IsOpen || InventoryController.IsOpen)
         {
             _isMoving = false;
             return;
@@ -113,10 +141,35 @@ public class SimpleEnemyController : MonoBehaviour
         transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, turnSpeed * Time.deltaTime);
 
         float distance = toPlayer.magnitude;
-        if (distance > attackRange)
+        float currentAttackRange = attackRange * _attackRangeMultiplier;
+
+        if (_attackInProgress)
+        {
+            _isMoving = false;
+
+            if (_pendingAttackDamage && Time.time >= _attackDamageAt)
+            {
+                _pendingAttackDamage = false;
+
+                if (distance <= currentAttackRange + 0.08f)
+                {
+                    _playerCombat.Health.TakeDamage(contactDamage);
+                }
+            }
+
+            if (Time.time < _attackRecoverUntil)
+            {
+                return;
+            }
+
+            _attackInProgress = false;
+        }
+
+        if (distance > currentAttackRange)
         {
             _isMoving = true;
-            transform.position += toPlayer.normalized * (moveSpeed * Time.deltaTime);
+            float currentMoveSpeed = moveSpeed * _moveSpeedMultiplier;
+            transform.position += toPlayer.normalized * (currentMoveSpeed * Time.deltaTime);
             return;
         }
 
@@ -127,9 +180,22 @@ public class SimpleEnemyController : MonoBehaviour
             return;
         }
 
-        _nextAttackTime = Time.time + attackCooldown;
+        StartAttack();
+    }
+
+    private void StartAttack()
+    {
+        float animationDuration = Mathf.Max(0.01f, attackAnimationDuration);
+        float hitDelay = Mathf.Clamp(attackHitDelay, 0.01f, animationDuration);
+        float recoveryDuration = Mathf.Max(0f, attackRecoveryDuration);
+
+        _isMoving = false;
+        _attackInProgress = true;
+        _pendingAttackDamage = true;
         _lastAttackStartedAt = Time.time;
-        _playerCombat.Health.TakeDamage(contactDamage);
+        _attackDamageAt = Time.time + hitDelay;
+        _attackRecoverUntil = Time.time + animationDuration + recoveryDuration;
+        _nextAttackTime = _attackRecoverUntil + attackCooldown * _attackCooldownMultiplier;
     }
 
     private void HandleDeath(CombatantHealth health)

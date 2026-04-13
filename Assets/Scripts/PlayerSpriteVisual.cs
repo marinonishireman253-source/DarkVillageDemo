@@ -29,6 +29,13 @@ public class PlayerSpriteVisual : MonoBehaviour
     [SerializeField] private float walkSquashAmount = 0.01f;
     [SerializeField] private float sideLeanAngle = 0.25f;
     [SerializeField] private float forwardLeanAngle = 0.2f;
+    [Header("Hit Reaction")]
+    [SerializeField] private float hitVisualDuration = 0.24f;
+    [SerializeField] private float hitFlashDuration = 0.12f;
+    [SerializeField] private float hitRecoilDistance = 0.12f;
+    [SerializeField] private float hitTiltAngle = 5.5f;
+    [SerializeField] private float hitSquashAmount = 0.02f;
+    [SerializeField] private Color hitTint = new Color(1f, 0.58f, 0.58f, 1f);
     [Header("Attack")]
     [SerializeField] private float frontAttackVisualDuration = 0.46f;
     [SerializeField] private float sideAttackVisualDuration = 0.28f;
@@ -39,6 +46,7 @@ public class PlayerSpriteVisual : MonoBehaviour
 
     private PlayerMover _playerMover;
     private PlayerCombat _playerCombat;
+    private CombatantHealth _health;
     private Sprite _frontIdleSprite;
     private Sprite _sideIdleSprite;
     private Sprite _backIdleSprite;
@@ -53,9 +61,11 @@ public class PlayerSpriteVisual : MonoBehaviour
     private SpriteCharacterLighting _characterLighting;
     private float _baseScale = 1f;
     private float _attackStartedAt = float.NegativeInfinity;
+    private float _hitStartedAt = float.NegativeInfinity;
     private FacingBucket _attackFacing = FacingBucket.Front;
     private bool _attackFlipX;
     private Vector3 _attackLungeDirection = Vector3.forward;
+    private Vector3 _hitRecoilDirection = Vector3.back;
 
     private void Awake()
     {
@@ -66,12 +76,14 @@ public class PlayerSpriteVisual : MonoBehaviour
     {
         EnsureVisual();
         SubscribeCombatEvents();
+        SubscribeHealthEvents();
         UpdateVisual();
     }
 
     private void OnDisable()
     {
         UnsubscribeCombatEvents();
+        UnsubscribeHealthEvents();
     }
 
     private void LateUpdate()
@@ -93,6 +105,11 @@ public class PlayerSpriteVisual : MonoBehaviour
         if (_playerCombat == null)
         {
             _playerCombat = GetComponent<PlayerCombat>();
+        }
+
+        if (_health == null)
+        {
+            _health = GetComponent<CombatantHealth>();
         }
 
         if (_visualRoot == null)
@@ -181,8 +198,25 @@ public class PlayerSpriteVisual : MonoBehaviour
         float attackDuration = GetAttackDuration(_attackFacing);
         float attackElapsed = GetAttackElapsed(attackDuration);
         float attackBlend = GetAttackBlend(attackElapsed, attackDuration);
+        float hitElapsed = GetHitElapsed();
+        float hitBlend = GetHitBlend(hitElapsed);
+        float hitFlashBlend = GetHitFlashBlend(hitElapsed);
         bool isWalking = moveBlend >= walkAnimationThreshold;
-        bool hasFacingData = cameraForward.sqrMagnitude > 0.0001f && cameraRight.sqrMagnitude > 0.0001f && facing.sqrMagnitude > 0.0001f;
+        bool hasFacingData = TryResolveFacingState(
+            cameraForward,
+            cameraRight,
+            facing,
+            out FacingBucket facingBucket,
+            out bool flipX,
+            out float lateralFacing,
+            out float forwardFacing);
+
+        if (hitElapsed >= 0f)
+        {
+            ApplyHitVisual(hasFacingData, facingBucket, flipX, lateralFacing, forwardFacing, hitBlend, hitFlashBlend);
+            _characterLighting?.ApplyFrame(_spriteRenderer, _visualRoot, desiredHeight, 0f, hitBlend * 0.25f);
+            return;
+        }
 
         if (attackElapsed >= 0f)
         {
@@ -195,39 +229,32 @@ public class PlayerSpriteVisual : MonoBehaviour
         {
             ApplySprite(SelectLoopSprite(_frontIdleSprite, _frontWalkSprites, isWalking, frontWalkAnimationFps));
             _spriteRenderer.flipX = false;
-            ApplyMotion(moveBlend, Time.time * frontWalkAnimationFps * Mathf.PI, attackBlend, 0f, 0f);
+            ApplyMotion(moveBlend, Time.time * frontWalkAnimationFps * Mathf.PI, attackBlend, 0f, 0f, 0f, 0f);
             _characterLighting?.ApplyFrame(_spriteRenderer, _visualRoot, desiredHeight, moveBlend, attackBlend);
             return;
         }
 
-        cameraForward.Normalize();
-        cameraRight.Normalize();
-        facing.Normalize();
-
-        float forwardDot = Vector3.Dot(facing, cameraForward);
-        if (forwardDot <= -0.45f)
+        switch (facingBucket)
         {
-            ApplySprite(SelectLoopSprite(_frontIdleSprite, _frontWalkSprites, isWalking, frontWalkAnimationFps));
-            _spriteRenderer.flipX = false;
-            ApplyMotion(moveBlend, Time.time * frontWalkAnimationFps * Mathf.PI, attackBlend, 0f, -forwardDot);
-            _characterLighting?.ApplyFrame(_spriteRenderer, _visualRoot, desiredHeight, moveBlend, attackBlend);
-            return;
+            case FacingBucket.Back:
+                ApplySprite(SelectLoopSprite(_backIdleSprite, _backWalkSprites, isWalking, backWalkAnimationFps));
+                _spriteRenderer.flipX = false;
+                ApplyMotion(moveBlend, Time.time * backWalkAnimationFps * Mathf.PI, attackBlend, 0f, forwardFacing, 0f, 0f);
+                _characterLighting?.ApplyFrame(_spriteRenderer, _visualRoot, desiredHeight, moveBlend, attackBlend);
+                return;
+            case FacingBucket.Side:
+                ApplySprite(SelectLoopSprite(_sideIdleSprite, _sideWalkSprites, isWalking, sideWalkAnimationFps));
+                _spriteRenderer.flipX = flipX;
+                ApplyMotion(moveBlend, Time.time * sideWalkAnimationFps * Mathf.PI, attackBlend, lateralFacing, 0f, 0f, 0f);
+                _characterLighting?.ApplyFrame(_spriteRenderer, _visualRoot, desiredHeight, moveBlend, attackBlend);
+                return;
+            default:
+                ApplySprite(SelectLoopSprite(_frontIdleSprite, _frontWalkSprites, isWalking, frontWalkAnimationFps));
+                _spriteRenderer.flipX = false;
+                ApplyMotion(moveBlend, Time.time * frontWalkAnimationFps * Mathf.PI, attackBlend, 0f, forwardFacing, 0f, 0f);
+                _characterLighting?.ApplyFrame(_spriteRenderer, _visualRoot, desiredHeight, moveBlend, attackBlend);
+                return;
         }
-
-        if (forwardDot >= 0.45f)
-        {
-            ApplySprite(SelectLoopSprite(_backIdleSprite, _backWalkSprites, isWalking, backWalkAnimationFps));
-            _spriteRenderer.flipX = false;
-            ApplyMotion(moveBlend, Time.time * backWalkAnimationFps * Mathf.PI, attackBlend, 0f, forwardDot);
-            _characterLighting?.ApplyFrame(_spriteRenderer, _visualRoot, desiredHeight, moveBlend, attackBlend);
-            return;
-        }
-
-        ApplySprite(SelectLoopSprite(_sideIdleSprite, _sideWalkSprites, isWalking, sideWalkAnimationFps));
-        float rightDot = Vector3.Dot(facing, cameraRight);
-        _spriteRenderer.flipX = rightDot < 0f;
-        ApplyMotion(moveBlend, Time.time * sideWalkAnimationFps * Mathf.PI, attackBlend, rightDot, 0f);
-        _characterLighting?.ApplyFrame(_spriteRenderer, _visualRoot, desiredHeight, moveBlend, attackBlend);
     }
 
     private void ApplyAttackVisual(float moveBlend, float attackElapsed, float attackBlend)
@@ -239,17 +266,47 @@ public class PlayerSpriteVisual : MonoBehaviour
             case FacingBucket.Back:
                 ApplySprite(SelectActionSprite(_backIdleSprite, _backWalkSprites, backWalkAnimationFps, _backAttackSprites, motionBlend >= walkAnimationThreshold, attackElapsed, GetAttackDuration(FacingBucket.Back)));
                 _spriteRenderer.flipX = false;
-                ApplyMotion(motionBlend, Time.time * backWalkAnimationFps * Mathf.PI, attackBlend, 0f, 1f);
+                ApplyMotion(motionBlend, Time.time * backWalkAnimationFps * Mathf.PI, attackBlend, 0f, 1f, 0f, 0f);
                 return;
             case FacingBucket.Side:
                 ApplySprite(SelectActionSprite(_sideIdleSprite, _sideWalkSprites, sideWalkAnimationFps, _sideAttackSprites, motionBlend >= walkAnimationThreshold, attackElapsed, GetAttackDuration(FacingBucket.Side)));
                 _spriteRenderer.flipX = _attackFlipX;
-                ApplyMotion(motionBlend, Time.time * sideWalkAnimationFps * Mathf.PI, attackBlend, _attackFlipX ? -1f : 1f, 0f);
+                ApplyMotion(motionBlend, Time.time * sideWalkAnimationFps * Mathf.PI, attackBlend, _attackFlipX ? -1f : 1f, 0f, 0f, 0f);
                 return;
             default:
                 ApplySprite(SelectActionSprite(_frontIdleSprite, _frontWalkSprites, frontWalkAnimationFps, _frontAttackSprites, motionBlend >= walkAnimationThreshold, attackElapsed, GetAttackDuration(FacingBucket.Front)));
                 _spriteRenderer.flipX = false;
-                ApplyMotion(motionBlend, Time.time * frontWalkAnimationFps * Mathf.PI, attackBlend, 0f, -1f);
+                ApplyMotion(motionBlend, Time.time * frontWalkAnimationFps * Mathf.PI, attackBlend, 0f, -1f, 0f, 0f);
+                return;
+        }
+    }
+
+    private void ApplyHitVisual(bool hasFacingData, FacingBucket facingBucket, bool flipX, float lateralFacing, float forwardFacing, float hitBlend, float hitFlashBlend)
+    {
+        if (!hasFacingData)
+        {
+            ApplySprite(_frontIdleSprite ?? _sideIdleSprite ?? _backIdleSprite);
+            _spriteRenderer.flipX = false;
+            ApplyMotion(0f, Time.time * frontWalkAnimationFps * Mathf.PI, 0f, 0f, 0f, hitBlend, hitFlashBlend);
+            return;
+        }
+
+        switch (facingBucket)
+        {
+            case FacingBucket.Back:
+                ApplySprite(_backIdleSprite ?? GetLoopFrame(_backWalkSprites, backWalkAnimationFps));
+                _spriteRenderer.flipX = false;
+                ApplyMotion(0f, Time.time * backWalkAnimationFps * Mathf.PI, 0f, 0f, forwardFacing, hitBlend, hitFlashBlend);
+                return;
+            case FacingBucket.Side:
+                ApplySprite(_sideIdleSprite ?? GetLoopFrame(_sideWalkSprites, sideWalkAnimationFps));
+                _spriteRenderer.flipX = flipX;
+                ApplyMotion(0f, Time.time * sideWalkAnimationFps * Mathf.PI, 0f, lateralFacing, 0f, hitBlend, hitFlashBlend);
+                return;
+            default:
+                ApplySprite(_frontIdleSprite ?? GetLoopFrame(_frontWalkSprites, frontWalkAnimationFps));
+                _spriteRenderer.flipX = false;
+                ApplyMotion(0f, Time.time * frontWalkAnimationFps * Mathf.PI, 0f, 0f, forwardFacing, hitBlend, hitFlashBlend);
                 return;
         }
     }
@@ -353,7 +410,7 @@ public class PlayerSpriteVisual : MonoBehaviour
         _baseScale = desiredHeight / spriteHeight;
     }
 
-    private void ApplyMotion(float moveBlend, float cycle, float attackBlend, float lateralFacing, float forwardFacing)
+    private void ApplyMotion(float moveBlend, float cycle, float attackBlend, float lateralFacing, float forwardFacing, float hitBlend, float hitFlashBlend)
     {
         if (_visualRoot == null)
         {
@@ -366,8 +423,9 @@ public class PlayerSpriteVisual : MonoBehaviour
 
         float squash = Mathf.Abs(Mathf.Sin(cycle * 2f)) * walkSquashAmount * moveBlend;
         float attackStretch = attackStretchAmount * attackBlend;
-        float scaleX = _baseScale * (1f + squash * 0.55f - attackStretch * 0.2f);
-        float scaleY = _baseScale * (1f - squash + attackStretch);
+        float hitSquash = hitSquashAmount * hitBlend;
+        float scaleX = _baseScale * (1f + squash * 0.55f - attackStretch * 0.2f + hitSquash);
+        float scaleY = _baseScale * (1f - squash + attackStretch - hitSquash * 0.75f);
 
         float zTilt = -Mathf.Sign(lateralFacing) * sideLeanAngle * moveBlend;
         float xTilt = -Mathf.Sign(forwardFacing) * forwardLeanAngle * moveBlend;
@@ -384,11 +442,24 @@ public class PlayerSpriteVisual : MonoBehaviour
 
         Vector3 lungeOffset = lungeDirection * (attackLungeDistance * attackBlend);
         Quaternion billboardRotation = GetUprightBillboardRotation(Camera.main);
+        Vector3 hitOffset = _hitRecoilDirection * (hitRecoilDistance * hitBlend);
+        float hitTilt = 0f;
 
-        _visualRoot.position = transform.position + localOffset + new Vector3(0f, yOffset, 0f) + lungeOffset;
+        if (Camera.main != null)
+        {
+            Vector3 cameraRight = Vector3.ProjectOnPlane(Camera.main.transform.right, Vector3.up);
+            if (cameraRight.sqrMagnitude > 0.0001f && _hitRecoilDirection.sqrMagnitude > 0.0001f)
+            {
+                cameraRight.Normalize();
+                hitTilt = Vector3.Dot(_hitRecoilDirection.normalized, cameraRight) * hitTiltAngle * hitBlend;
+            }
+        }
+
+        _visualRoot.position = transform.position + localOffset + new Vector3(0f, yOffset, 0f) + lungeOffset + hitOffset;
         _visualRoot.localScale = new Vector3(scaleX, scaleY, 1f);
-        _visualRoot.rotation = billboardRotation * Quaternion.Euler(xTilt, 0f, zTilt);
-        _spriteRenderer.color = Color.Lerp(Color.white, attackTint, attackBlend * 0.6f);
+        _visualRoot.rotation = billboardRotation * Quaternion.Euler(xTilt, 0f, zTilt + hitTilt);
+        Color attackColor = Color.Lerp(Color.white, attackTint, attackBlend * 0.6f);
+        _spriteRenderer.color = Color.Lerp(attackColor, hitTint, hitFlashBlend);
     }
 
     private static Quaternion GetUprightBillboardRotation(Camera mainCamera)
@@ -434,6 +505,44 @@ public class PlayerSpriteVisual : MonoBehaviour
         return Mathf.Sin(normalized * Mathf.PI);
     }
 
+    private float GetHitElapsed()
+    {
+        if (hitVisualDuration <= 0.0001f)
+        {
+            return -1f;
+        }
+
+        float elapsed = Time.time - _hitStartedAt;
+        if (elapsed < 0f || elapsed > hitVisualDuration)
+        {
+            return -1f;
+        }
+
+        return elapsed;
+    }
+
+    private float GetHitBlend(float hitElapsed)
+    {
+        if (hitElapsed < 0f || hitVisualDuration <= 0.0001f)
+        {
+            return 0f;
+        }
+
+        float normalized = hitElapsed / hitVisualDuration;
+        return Mathf.Sin(normalized * Mathf.PI);
+    }
+
+    private float GetHitFlashBlend(float hitElapsed)
+    {
+        if (hitElapsed < 0f || hitFlashDuration <= 0.0001f)
+        {
+            return 0f;
+        }
+
+        float normalized = 1f - Mathf.Clamp01(hitElapsed / hitFlashDuration);
+        return normalized * normalized;
+    }
+
     private float GetAttackDuration(FacingBucket facing)
     {
         return facing switch
@@ -458,6 +567,20 @@ public class PlayerSpriteVisual : MonoBehaviour
         }
     }
 
+    private void SubscribeHealthEvents()
+    {
+        if (_health == null)
+        {
+            _health = GetComponent<CombatantHealth>();
+        }
+
+        if (_health != null)
+        {
+            _health.OnDamaged -= HandleDamaged;
+            _health.OnDamaged += HandleDamaged;
+        }
+    }
+
     private void UnsubscribeCombatEvents()
     {
         if (_playerCombat != null)
@@ -466,10 +589,24 @@ public class PlayerSpriteVisual : MonoBehaviour
         }
     }
 
+    private void UnsubscribeHealthEvents()
+    {
+        if (_health != null)
+        {
+            _health.OnDamaged -= HandleDamaged;
+        }
+    }
+
     private void HandleAttackStarted()
     {
         _attackStartedAt = Time.time;
         CacheAttackFacing();
+    }
+
+    private void HandleDamaged(CombatantHealth health, int damage)
+    {
+        _hitStartedAt = Time.time;
+        CacheHitReactionDirection();
     }
 
     private void CacheAttackFacing()
@@ -520,6 +657,86 @@ public class PlayerSpriteVisual : MonoBehaviour
 
         _attackFacing = FacingBucket.Side;
         _attackFlipX = Vector3.Dot(facing, cameraRight) < 0f;
+    }
+
+    private void CacheHitReactionDirection()
+    {
+        Vector3 recoilDirection = -Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+        float bestDistance = 16f;
+        SimpleEnemyController[] enemies = FindObjectsByType<SimpleEnemyController>(FindObjectsSortMode.None);
+
+        for (int index = 0; index < enemies.Length; index++)
+        {
+            SimpleEnemyController enemy = enemies[index];
+            if (enemy == null || !enemy.IsAlive || !enemy.IsEncounterEnabled)
+            {
+                continue;
+            }
+
+            Vector3 awayFromEnemy = transform.position - enemy.transform.position;
+            awayFromEnemy.y = 0f;
+            float sqrDistance = awayFromEnemy.sqrMagnitude;
+            if (sqrDistance <= 0.0001f || sqrDistance > bestDistance)
+            {
+                continue;
+            }
+
+            bestDistance = sqrDistance;
+            recoilDirection = awayFromEnemy.normalized;
+        }
+
+        recoilDirection = Vector3.ProjectOnPlane(recoilDirection, Vector3.up);
+        if (recoilDirection.sqrMagnitude <= 0.0001f)
+        {
+            recoilDirection = Vector3.back;
+        }
+
+        _hitRecoilDirection = recoilDirection.normalized;
+    }
+
+    private static bool TryResolveFacingState(
+        Vector3 cameraForward,
+        Vector3 cameraRight,
+        Vector3 facing,
+        out FacingBucket facingBucket,
+        out bool flipX,
+        out float lateralFacing,
+        out float forwardFacing)
+    {
+        facingBucket = FacingBucket.Front;
+        flipX = false;
+        lateralFacing = 0f;
+        forwardFacing = 0f;
+
+        if (cameraForward.sqrMagnitude <= 0.0001f || cameraRight.sqrMagnitude <= 0.0001f || facing.sqrMagnitude <= 0.0001f)
+        {
+            return false;
+        }
+
+        cameraForward.Normalize();
+        cameraRight.Normalize();
+        facing.Normalize();
+
+        float forwardDot = Vector3.Dot(facing, cameraForward);
+        if (forwardDot <= -0.45f)
+        {
+            facingBucket = FacingBucket.Front;
+            forwardFacing = -forwardDot;
+            return true;
+        }
+
+        if (forwardDot >= 0.45f)
+        {
+            facingBucket = FacingBucket.Back;
+            forwardFacing = forwardDot;
+            return true;
+        }
+
+        float rightDot = Vector3.Dot(facing, cameraRight);
+        facingBucket = FacingBucket.Side;
+        flipX = rightDot < 0f;
+        lateralFacing = rightDot;
+        return true;
     }
 
     private Transform CreateVisualRoot()

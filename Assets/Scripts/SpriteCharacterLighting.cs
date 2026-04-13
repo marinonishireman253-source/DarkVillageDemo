@@ -50,14 +50,16 @@ public sealed class SpriteCharacterLighting : MonoBehaviour
         }
 
         RoomLightingZone zone = RoomLightingZone.FindBest(transform.position);
-        Vector3 mainLightDirection = new Vector3(0.18f, -0.96f, -0.2f);
-        Color mainLightColor = new Color(0.82f, 0.86f, 0.94f, 1f);
+        Vector3 mainLightDirection = Vector3.down;
+        Color mainLightColor = Color.black;
+        float resolvedMainLightStrength = 0f;
 
         Light mainDirectionalLight = GetMainDirectionalLight();
         if (mainDirectionalLight != null && mainDirectionalLight.isActiveAndEnabled)
         {
             mainLightDirection = mainDirectionalLight.transform.forward;
             mainLightColor = mainDirectionalLight.color * Mathf.Max(0.01f, mainDirectionalLight.intensity);
+            resolvedMainLightStrength = mainLightStrength;
         }
 
         Color ambientColor = zone != null ? zone.AmbientColor : new Color(0.82f, 0.82f, 0.86f, 1f);
@@ -89,7 +91,7 @@ public sealed class SpriteCharacterLighting : MonoBehaviour
         propertyBlock.SetFloat(AmbientIntensityId, ambientIntensity);
         propertyBlock.SetColor(MainLightColorId, mainLightColor);
         propertyBlock.SetVector(MainLightDirectionId, mainLightDirection);
-        propertyBlock.SetFloat(MainLightStrengthId, mainLightStrength);
+        propertyBlock.SetFloat(MainLightStrengthId, resolvedMainLightStrength);
         propertyBlock.SetColor(AccentColorId, accentColor);
         propertyBlock.SetVector(AccentDirectionId, accentDirection);
         propertyBlock.SetFloat(AccentStrengthId, accentStrength);

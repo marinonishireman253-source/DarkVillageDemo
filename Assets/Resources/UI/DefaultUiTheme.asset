@@ -12,8 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7f9c789a362d42aca70fc76281747c1c, type: 3}
   m_Name: DefaultUiTheme
   m_EditorClassIdentifier: 
-  bodyFont: {fileID: 0}
-  displayFont: {fileID: 0}
+  bodyFontAsset: {fileID: 0}
+  displayFontAsset: {fileID: 0}
   charcoal: {r: 0.050980393, g: 0.0627451, b: 0.078431375, a: 1}
   slate: {r: 0.11764707, g: 0.13725491, b: 0.16470589, a: 1}
   primaryText: {r: 0.9333334, g: 0.909804, b: 0.86666673, a: 1}

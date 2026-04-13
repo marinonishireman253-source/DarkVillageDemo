@@ -1,36 +1,60 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using System.Collections.Generic;
 
 public sealed class TowerInteriorSlice : MonoBehaviour
 {
     private const string RootName = "__TowerInteriorSlice";
-    private const int LayoutVersion = 11;
+    private const int LayoutVersion = 18;
     private const float RoomZoneOverlap = 4.6f;
     private const float RoomZoneDepth = 5.2f;
     private const float RoomZoneCenterY = 2.35f;
     private const float RoomZoneBlendDuration = 0.32f;
     private const float PlayerReferenceHeight = 2.15f;
     private const float MonsterHeightRatio = 0.7f;
-    private const float MonsterPreviewX = -11.6f;
-    private const float MonsterPreviewDepthOffset = 0f;
     private const int MonsterSortingOrder = 10;
-
+    private const int LandingRoomIndex = 0;
+    private const int RuleRoomIndex = 1;
+    private const int PressureRoomIndex = 2;
+    private const int ChoiceRoomIndex = 3;
+    private const int FinaleRoomIndex = 4;
+    private const float LandingRelicLocalX = -10.4f;
+    private const float LandingGuideLocalX = 15.2f;
+    private const float LandingGuideLocalZOffset = 0.22f;
+    private const float LandingTestRoomLocalX = -16f;
+    private const float LandingTestRiskStationLocalX = -1.45f;
+    private const float LandingTestSafeStationLocalX = 1.45f;
+    private const float FirstBrazierLocalX = 8.6f;
+    private const float PressureEnemyLocalX = -4.4f;
+    private const float ChoiceRiskyLocalX = -9.4f;
+    private const float ChoiceSafeLocalX = 9.4f;
+    private const float ChoiceAnchorLocalX = 0f;
+    private const float ChoicePromptLocalY = 1.02f;
+    private const float SecondBrazierLocalX = 7.8f;
+    private const float FinalEnemyLocalX = -7.2f;
+    private const float FinalRiskEnemyLocalX = -2.6f;
+    private const float FinalRewardLocalX = -0.2f;
+    private const float BrazierLocalZOffset = 0.18f;
+    private const float ExitLocalX = 16.5f;
+    private const float ExitLocalZOffset = 0.28f;
     private static readonly Color NightColor = new Color(0.06f, 0.07f, 0.09f);
     private static readonly Color ShellColor = new Color(0.18f, 0.19f, 0.21f);
     private static readonly Color FloorColor = new Color(0.3f, 0.25f, 0.21f);
     private static readonly Color CeilingColor = new Color(0.24f, 0.24f, 0.23f);
     private static readonly Color DividerColor = new Color(0.33f, 0.3f, 0.27f);
-    private static readonly Color WindowColor = new Color(0.19f, 0.25f, 0.32f);
+    private static readonly Color WindowColor = new Color(0.12f, 0.12f, 0.13f);
     private static readonly Color ForegroundTrimColor = new Color(0.22f, 0.2f, 0.18f);
     private static readonly Color MidDepthFloorColor = new Color(0.36f, 0.3f, 0.25f);
     private static readonly Color BackDepthFloorColor = new Color(0.26f, 0.22f, 0.19f);
     private static readonly Color CeilingBeamColor = new Color(0.2f, 0.19f, 0.18f);
     private static readonly Color LampColor = new Color(0.74f, 0.67f, 0.44f);
-    private const int MonsterPreviewRoomIndex = 1;
     private static readonly StandardRoomTemplate[] RoomTemplates =
     {
-        CreateLivingRoomTemplate(),
-        CreateStudyRoomTemplate()
+        CreateLivingRoomTemplate("Ash_Foyer"),
+        CreateStudyRoomTemplate("Ash_Rule"),
+        CreateLivingRoomTemplate("Ash_Pressure"),
+        CreateStudyRoomTemplate("Ash_Choice"),
+        CreateLivingRoomTemplate("Ash_Finale")
     };
 
     public static float WalkDepth => RoomTemplates[0].WalkDepth;
@@ -44,6 +68,7 @@ public sealed class TowerInteriorSlice : MonoBehaviour
 
     private PlayerMover _player;
     private RoomCameraZone _startingRoomZone;
+    private AshParlorRunController _ashParlorController;
     [SerializeField] private int _layoutVersion;
 
     public static void Ensure(PlayerMover player)
@@ -125,10 +150,18 @@ public sealed class TowerInteriorSlice : MonoBehaviour
         _player = player;
         _layoutVersion = LayoutVersion;
 
+        BuildAshParlorState();
         BuildShell();
         BuildRooms();
         BuildRoomDividers();
+        BuildAshParlorSeals();
         PositionPlayer();
+    }
+
+    private void BuildAshParlorState()
+    {
+        Transform stateRoot = CreateGroup(transform, "AshParlorState");
+        _ashParlorController = stateRoot.gameObject.AddComponent<AshParlorRunController>();
     }
 
     private void PositionPlayer()
@@ -200,12 +233,18 @@ public sealed class TowerInteriorSlice : MonoBehaviour
             BuildRoom(roomRoot, template, roomIndex);
             ConfigureRoomLighting(roomRoot, roomStartX, roomEndX, roomIndex);
             CreateRoomLightRig(roomRoot, roomIndex);
+            if (roomIndex == PressureRoomIndex)
+            {
+                _ashParlorController?.RegisterPressureRoomLights(roomRoot.GetComponentsInChildren<Light>(true));
+            }
 
             RoomCameraZone roomZone = CreateRoomCameraZone(roomRoot, template, roomStartX, roomEndX, roomIndex);
             if (roomIndex == 0)
             {
                 _startingRoomZone = roomZone;
             }
+
+            _ashParlorController?.RegisterRoomBounds(roomIndex, roomStartX, roomEndX);
 
             roomStartX = roomEndX;
         }
@@ -227,22 +266,481 @@ public sealed class TowerInteriorSlice : MonoBehaviour
         CreateLocalBlocks(ceilingRoot, template.CeilingBlocks, roomIndex);
         CreateLocalBlocks(accentRoot, template.AccentBlocks, roomIndex);
 
-        if (roomIndex == MonsterPreviewRoomIndex)
+        if (roomIndex == LandingRoomIndex)
         {
-            BuildMonsterPreview(roomRoot, template);
+            BuildLandingRoom(roomRoot, template);
         }
+
+        if (roomIndex == RuleRoomIndex)
+        {
+            BuildAshParlorFirstBrazier(roomRoot, template);
+        }
+
+        if (roomIndex == PressureRoomIndex)
+        {
+            BuildPressureEnemy(roomRoot, template);
+        }
+
+        if (roomIndex == ChoiceRoomIndex)
+        {
+            BuildChoiceRoom(roomRoot, template);
+        }
+
+        if (roomIndex == FinaleRoomIndex)
+        {
+            BuildFinalEnemy(roomRoot, template);
+            BuildRiskRewardPickup(roomRoot, template);
+            BuildAshParlorSecondBrazier(roomRoot, template);
+            BuildAshParlorExit(roomRoot, template);
+        }
+
     }
 
-    private void BuildMonsterPreview(Transform roomRoot, StandardRoomTemplate template)
+    private void BuildLandingRoom(Transform roomRoot, StandardRoomTemplate template)
+    {
+        BuildLandingRelic(roomRoot, template);
+        BuildLandingGuide(roomRoot, template);
+        BuildLandingTestRoom(roomRoot, template);
+    }
+
+    private void BuildLandingTestRoom(Transform roomRoot, StandardRoomTemplate template)
+    {
+        Transform testRoomRoot = CreateGroup(
+            roomRoot,
+            "AshFoyer_TestRoom",
+            new Vector3(LandingTestRoomLocalX, 0f, template.WalkDepth + 0.12f));
+
+        Renderer floor = CreateDecorBlock(testRoomRoot, "TestFloor", new Vector3(0f, 0.08f, 0f), new Vector3(6.8f, 0.14f, 1.6f), new Color(0.23f, 0.2f, 0.18f));
+        Renderer rearWall = CreateDecorBlock(testRoomRoot, "TestRearWall", new Vector3(0f, 1.7f, 0.62f), new Vector3(6.8f, 3.4f, 0.14f), new Color(0.17f, 0.15f, 0.14f));
+        Renderer leftWall = CreateDecorBlock(testRoomRoot, "TestLeftWall", new Vector3(-3.18f, 1.7f, 0.24f), new Vector3(0.18f, 3.4f, 0.92f), new Color(0.18f, 0.16f, 0.15f));
+        Renderer rightWall = CreateDecorBlock(testRoomRoot, "TestRightWall", new Vector3(3.18f, 1.7f, 0.24f), new Vector3(0.18f, 3.4f, 0.92f), new Color(0.18f, 0.16f, 0.15f));
+        Renderer lintel = CreateDecorBlock(testRoomRoot, "TestLintel", new Vector3(0f, 3.18f, 0.24f), new Vector3(6.5f, 0.16f, 0.82f), new Color(0.22f, 0.2f, 0.18f));
+        Renderer sign = CreateDecorBlock(testRoomRoot, "TestSign", new Vector3(0f, 2.46f, 0.52f), new Vector3(3.8f, 0.64f, 0.08f), new Color(0.34f, 0.28f, 0.22f));
+
+        DisableDecorCollider(floor);
+        DisableDecorCollider(rearWall);
+        DisableDecorCollider(leftWall);
+        DisableDecorCollider(rightWall);
+        DisableDecorCollider(lintel);
+        DisableDecorCollider(sign);
+
+        CreatePointLight(
+            testRoomRoot,
+            "TestRoomGlow",
+            new Vector3(0f, 2.36f, 0.18f),
+            new Color(0.86f, 0.74f, 0.54f, 1f),
+            0.42f,
+            4.4f,
+            LightRenderMode.ForcePixel);
+
+        BuildTestScenarioInteractable(
+            testRoomRoot,
+            "RiskSummaryTest",
+            LandingTestRiskStationLocalX,
+            AshParlorRunController.FloorSummaryTestPreset.RiskSummary,
+            "风险结算测试",
+            "准备 Risk");
+
+        BuildTestScenarioInteractable(
+            testRoomRoot,
+            "SafeSummaryTest",
+            LandingTestSafeStationLocalX,
+            AshParlorRunController.FloorSummaryTestPreset.SafeSummary,
+            "安全结算测试",
+            "准备 Safe");
+    }
+
+    private void BuildLandingIntroTrigger(Transform roomRoot, StandardRoomTemplate template)
+    {
+        Transform triggerRoot = CreateGroup(roomRoot, "LandingIntroTrigger");
+        NarrationTrigger trigger = triggerRoot.gameObject.AddComponent<NarrationTrigger>();
+        trigger.Configure(
+            "伊尔萨恩",
+            new[]
+            {
+                "这间客厅像被烧毁过，却又被谁按原样拼了回来。",
+                "灰封正往更深处收紧。先找到第一盏封印烛台。"
+            },
+            0,
+            new Vector3(-2.6f, 1.08f, template.WalkDepth + 0.16f),
+            new Vector3(7.2f, 2.2f, 2.1f));
+    }
+
+    private void BuildLandingRelic(Transform roomRoot, StandardRoomTemplate template)
+    {
+        Transform relicRoot = CreateGroup(
+            roomRoot,
+            "AshFoyerRelic",
+            new Vector3(LandingRelicLocalX, 0f, template.WalkDepth + 0.16f));
+
+        CreateDecorBlock(relicRoot, "Base", new Vector3(0f, 0.28f, 0f), new Vector3(1.22f, 0.56f, 0.92f), new Color(0.25f, 0.22f, 0.2f));
+        CreateDecorBlock(relicRoot, "Slab", new Vector3(0f, 1.1f, 0.08f), new Vector3(0.82f, 1.48f, 0.26f), new Color(0.3f, 0.26f, 0.23f));
+        CreateDecorBlock(relicRoot, "AshSeal", new Vector3(0f, 1.28f, 0.26f), new Vector3(0.46f, 0.52f, 0.08f), new Color(0.42f, 0.31f, 0.22f));
+        CreateDecorBlock(relicRoot, "AshBowl", new Vector3(0.36f, 0.94f, 0.08f), new Vector3(0.32f, 0.18f, 0.32f), new Color(0.34f, 0.24f, 0.18f));
+
+        Transform glowRoot = CreateGroup(relicRoot, "Glow", new Vector3(0.18f, 1.18f, 0.18f));
+        Light relicLight = glowRoot.gameObject.AddComponent<Light>();
+        relicLight.type = LightType.Point;
+        relicLight.shadows = LightShadows.None;
+        relicLight.range = 3.6f;
+        relicLight.intensity = 0.46f;
+        relicLight.color = new Color(0.96f, 0.58f, 0.28f, 1f);
+
+        InspectionInteractable inspectable = relicRoot.gameObject.AddComponent<InspectionInteractable>();
+        inspectable.Configure(
+            "焦痕誓牌",
+            "查看",
+            "伊尔萨恩",
+            new[]
+            {
+                "这块誓牌不像被火烧黑的，更像是有人把整层的灰都按在了它上面。",
+                "裂痕一路往右边延过去。第一盏封印烛台大概就在前面。"
+            },
+            new[]
+            {
+                "灰痕还在往里层裂开。",
+                "先把第一盏封印烛台点亮。"
+            },
+            new Vector3(0f, 1.02f, 0.06f),
+            new Vector3(1.65f, 2.05f, 1.35f));
+    }
+
+    private void BuildLandingGuide(Transform roomRoot, StandardRoomTemplate template)
+    {
+        Transform guideRoot = CreateGroup(
+            roomRoot,
+            "AshFoyerGuide",
+            new Vector3(LandingGuideLocalX, 0f, template.WalkDepth + LandingGuideLocalZOffset));
+
+        CreateDecorBlock(guideRoot, "GuideStone", new Vector3(0f, 0.22f, 0f), new Vector3(0.76f, 0.44f, 0.58f), new Color(0.28f, 0.23f, 0.2f));
+        CreateDecorBlock(guideRoot, "GuideAsh_0", new Vector3(-0.5f, 0.26f, 0.04f), new Vector3(0.18f, 0.08f, 0.18f), new Color(0.56f, 0.34f, 0.18f));
+        CreateDecorBlock(guideRoot, "GuideAsh_1", new Vector3(0f, 0.3f, 0.06f), new Vector3(0.24f, 0.1f, 0.22f), new Color(0.68f, 0.4f, 0.2f));
+        CreateDecorBlock(guideRoot, "GuideAsh_2", new Vector3(0.44f, 0.34f, 0.08f), new Vector3(0.18f, 0.08f, 0.18f), new Color(0.84f, 0.48f, 0.24f));
+
+        CreatePointLight(
+            guideRoot,
+            "GuideGlow",
+            new Vector3(0.08f, 1.08f, 0.16f),
+            new Color(1f, 0.62f, 0.3f, 1f),
+            0.58f,
+            4.6f,
+            LightRenderMode.ForcePixel);
+
+        CreateSpotLight(
+            guideRoot,
+            "GuideSpill",
+            new Vector3(0.1f, 1.16f, 0.12f),
+            new Vector3(0.88f, -0.42f, -0.06f),
+            new Color(1f, 0.7f, 0.42f, 1f),
+            0.72f,
+            5.2f,
+            74f,
+            46f,
+            LightRenderMode.ForcePixel);
+    }
+
+    private void BuildTestScenarioInteractable(
+        Transform parent,
+        string objectName,
+        float localX,
+        AshParlorRunController.FloorSummaryTestPreset preset,
+        string displayName,
+        string promptText)
+    {
+        Transform stationRoot = CreateGroup(
+            parent,
+            objectName,
+            new Vector3(localX, 0f, 0.02f));
+
+        List<Renderer> renderers = new List<Renderer>();
+        renderers.Add(CreateDecorBlock(stationRoot, "Base", new Vector3(0f, 0.28f, 0f), new Vector3(1.08f, 0.56f, 0.96f), new Color(0.22f, 0.2f, 0.19f)));
+        renderers.Add(CreateDecorBlock(stationRoot, "Column", new Vector3(0f, 1.04f, 0.04f), new Vector3(0.58f, 0.96f, 0.52f), new Color(0.32f, 0.26f, 0.22f)));
+        renderers.Add(CreateDecorBlock(stationRoot, "Head", new Vector3(0f, 1.74f, 0.06f), new Vector3(0.94f, 0.36f, 0.16f), new Color(0.4f, 0.31f, 0.23f)));
+
+        Transform lightRoot = CreateGroup(stationRoot, "Accent", new Vector3(0f, 1.3f, 0.08f));
+        Light stationLight = lightRoot.gameObject.AddComponent<Light>();
+        stationLight.type = LightType.Point;
+        stationLight.shadows = LightShadows.None;
+        stationLight.range = 3.6f;
+        stationLight.intensity = 0.9f;
+
+        BoxCollider interaction = stationRoot.gameObject.AddComponent<BoxCollider>();
+        interaction.isTrigger = true;
+        interaction.center = new Vector3(0f, 1.02f, 0.02f);
+        interaction.size = new Vector3(1.7f, 2.1f, 1.3f);
+
+        AshParlorTestRoomInteractable interactable = stationRoot.gameObject.AddComponent<AshParlorTestRoomInteractable>();
+        interactable.Configure(_ashParlorController, preset, stationLight, renderers.ToArray(), displayName, promptText);
+    }
+
+    private void BuildAshParlorFirstBrazier(Transform roomRoot, StandardRoomTemplate template)
+    {
+        AshParlorBrazierInteractable brazier = BuildAshParlorBrazier(roomRoot, template, "AshBrazier_1", FirstBrazierLocalX, 1);
+        _ashParlorController?.RegisterFirstBrazier(brazier);
+    }
+
+    private void BuildPressureEnemy(Transform roomRoot, StandardRoomTemplate template)
+    {
+        SimpleEnemyController enemy = BuildEnemy(
+            roomRoot,
+            "Monster_PressureEcho",
+            new Vector3(PressureEnemyLocalX, template.PlayerSpawnHeight, template.WalkDepth),
+            4,
+            1);
+        _ashParlorController?.RegisterPressureEnemy(enemy);
+    }
+
+    private void BuildFinalEnemy(Transform roomRoot, StandardRoomTemplate template)
+    {
+        SimpleEnemyController enemy = BuildEnemy(
+            roomRoot,
+            "Monster_FinalEcho",
+            new Vector3(FinalEnemyLocalX, template.PlayerSpawnHeight, template.WalkDepth),
+            5,
+            1);
+        _ashParlorController?.RegisterFinalEnemy(enemy);
+
+        SimpleEnemyController riskEnemy = BuildEnemy(
+            roomRoot,
+            "Monster_FinalEcho_Risk",
+            new Vector3(FinalRiskEnemyLocalX, template.PlayerSpawnHeight, template.WalkDepth),
+            4,
+            1);
+        _ashParlorController?.RegisterRiskBonusEnemy(riskEnemy);
+    }
+
+    private SimpleEnemyController BuildEnemy(Transform roomRoot, string objectName, Vector3 localPosition, int healthPoints, int damage)
     {
         float desiredMonsterHeight = PlayerReferenceHeight * MonsterHeightRatio;
-        float monsterDepth = template.WalkDepth + MonsterPreviewDepthOffset;
-        Transform monsterRoot = CreateGroup(
-            roomRoot,
-            "Monster_BeamVisitor",
-            new Vector3(MonsterPreviewX, template.PlayerSpawnHeight, monsterDepth));
+        Transform monsterRoot = CreateGroup(roomRoot, objectName, localPosition);
         MonsterSpriteVisual visual = monsterRoot.gameObject.AddComponent<MonsterSpriteVisual>();
         visual.Configure(desiredMonsterHeight, MonsterSortingOrder, new Vector3(0f, 0.01f, 0f));
+
+        CombatantHealth health = monsterRoot.gameObject.AddComponent<CombatantHealth>();
+        health.Configure(healthPoints);
+
+        SimpleEnemyController enemy = monsterRoot.gameObject.AddComponent<SimpleEnemyController>();
+        enemy.Configure("仪式回响", healthPoints, damage);
+        return enemy;
+    }
+
+    private void BuildChoiceRoom(Transform roomRoot, StandardRoomTemplate template)
+    {
+        Transform anchor = CreateGroup(
+            roomRoot,
+            "ChoiceAnchor",
+            new Vector3(ChoiceAnchorLocalX, 1.2f, template.WalkDepth + BrazierLocalZOffset));
+
+        AshParlorChoicePromptInteractable prompt = BuildChoicePromptInteractable(roomRoot, template);
+
+        AshParlorChoiceInteractable risky = BuildChoiceInteractable(
+            roomRoot,
+            template,
+            "Choice_Risky",
+            ChoiceRiskyLocalX,
+            AshParlorChoiceInteractable.ChoiceKind.Risky,
+            "低吼回廊",
+            "走向低吼");
+
+        AshParlorChoiceInteractable safe = BuildChoiceInteractable(
+            roomRoot,
+            template,
+            "Choice_Safe",
+            ChoiceSafeLocalX,
+            AshParlorChoiceInteractable.ChoiceKind.Safe,
+            "沉寂回廊",
+            "走向沉寂");
+
+        _ashParlorController?.RegisterChoicePair(risky, safe, prompt, prompt != null ? prompt.transform : anchor);
+    }
+
+    private AshParlorChoicePromptInteractable BuildChoicePromptInteractable(Transform roomRoot, StandardRoomTemplate template)
+    {
+        Transform promptRoot = CreateGroup(
+            roomRoot,
+            "ChoicePrompt",
+            new Vector3(ChoiceAnchorLocalX, 0f, template.WalkDepth + 0.14f));
+
+        CreateDecorBlock(promptRoot, "Base", new Vector3(0f, 0.24f, 0f), new Vector3(1.4f, 0.48f, 1.2f), new Color(0.24f, 0.22f, 0.2f));
+        CreateDecorBlock(promptRoot, "Tablet", new Vector3(0f, ChoicePromptLocalY, 0.02f), new Vector3(0.82f, 1.32f, 0.16f), new Color(0.34f, 0.28f, 0.22f));
+        CreateDecorBlock(promptRoot, "MarkerBar", new Vector3(0f, 1.82f, 0.06f), new Vector3(1.6f, 0.08f, 0.1f), new Color(0.76f, 0.63f, 0.34f));
+
+        Transform lightRoot = CreateGroup(promptRoot, "ChoiceBeacon", new Vector3(0f, 1.48f, 0.14f));
+        Light promptLight = lightRoot.gameObject.AddComponent<Light>();
+        promptLight.type = LightType.Point;
+        promptLight.shadows = LightShadows.None;
+        promptLight.range = 3.4f;
+        promptLight.intensity = 0.96f;
+        promptLight.color = new Color(0.92f, 0.78f, 0.46f, 1f);
+
+        BoxCollider interaction = promptRoot.gameObject.AddComponent<BoxCollider>();
+        interaction.isTrigger = true;
+        interaction.center = new Vector3(0f, 1.08f, 0.02f);
+        interaction.size = new Vector3(2.2f, 2.2f, 1.8f);
+
+        AshParlorChoicePromptInteractable prompt = promptRoot.gameObject.AddComponent<AshParlorChoicePromptInteractable>();
+        prompt.Configure(_ashParlorController, "抉择台", "做出选择");
+        return prompt;
+    }
+
+    private AshParlorChoiceInteractable BuildChoiceInteractable(
+        Transform roomRoot,
+        StandardRoomTemplate template,
+        string objectName,
+        float localX,
+        AshParlorChoiceInteractable.ChoiceKind choiceKind,
+        string displayName,
+        string promptText)
+    {
+        Transform choiceRoot = CreateGroup(
+            roomRoot,
+            objectName,
+            new Vector3(localX, 0f, template.WalkDepth + BrazierLocalZOffset));
+
+        List<Renderer> renderers = new List<Renderer>();
+        renderers.Add(CreateDecorBlock(choiceRoot, "Pedestal", new Vector3(0f, 0.32f, 0f), new Vector3(0.92f, 0.64f, 0.92f), new Color(0.22f, 0.2f, 0.19f)));
+        renderers.Add(CreateDecorBlock(choiceRoot, "Head", new Vector3(0f, 1.02f, 0.04f), new Vector3(0.66f, 0.52f, 0.66f), new Color(0.3f, 0.24f, 0.2f)));
+
+        Transform lightRoot = CreateGroup(choiceRoot, "Accent", new Vector3(0f, 1.26f, 0.06f));
+        Light choiceLight = lightRoot.gameObject.AddComponent<Light>();
+        choiceLight.type = LightType.Point;
+        choiceLight.shadows = LightShadows.None;
+        choiceLight.range = 4.2f;
+        choiceLight.intensity = 1.1f;
+        choiceLight.color = choiceKind == AshParlorChoiceInteractable.ChoiceKind.Risky
+            ? new Color(0.86f, 0.38f, 0.18f, 1f)
+            : new Color(0.58f, 0.68f, 0.78f, 1f);
+
+        AshParlorChoiceInteractable interactable = choiceRoot.gameObject.AddComponent<AshParlorChoiceInteractable>();
+        interactable.Configure(_ashParlorController, choiceKind, choiceLight, renderers.ToArray(), displayName, promptText);
+        return interactable;
+    }
+
+    private void BuildAshParlorSecondBrazier(Transform roomRoot, StandardRoomTemplate template)
+    {
+        AshParlorBrazierInteractable brazier = BuildAshParlorBrazier(roomRoot, template, "AshBrazier_2", SecondBrazierLocalX, 2);
+        _ashParlorController?.RegisterSecondBrazier(brazier);
+    }
+
+    private void BuildRiskRewardPickup(Transform roomRoot, StandardRoomTemplate template)
+    {
+        Transform rewardRoot = CreateGroup(
+            roomRoot,
+            "AshParlor_RiskReward",
+            new Vector3(FinalRewardLocalX, 0f, template.WalkDepth + 0.28f));
+
+        CreateDecorBlock(rewardRoot, "CrystalCore", new Vector3(0f, 0.78f, 0.02f), new Vector3(0.34f, 0.68f, 0.34f), new Color(0.42f, 0.56f, 0.88f));
+        CreateDecorBlock(rewardRoot, "CrystalShard_Left", new Vector3(-0.22f, 0.5f, 0.04f), new Vector3(0.18f, 0.34f, 0.18f), new Color(0.3f, 0.42f, 0.78f));
+        CreateDecorBlock(rewardRoot, "CrystalShard_Right", new Vector3(0.2f, 0.44f, 0.03f), new Vector3(0.16f, 0.28f, 0.16f), new Color(0.34f, 0.45f, 0.82f));
+
+        Transform lightRoot = CreateGroup(rewardRoot, "Glow", new Vector3(0f, 0.86f, 0.06f));
+        Light rewardLight = lightRoot.gameObject.AddComponent<Light>();
+        rewardLight.type = LightType.Point;
+        rewardLight.shadows = LightShadows.None;
+        rewardLight.range = 2.8f;
+        rewardLight.intensity = 0.8f;
+        rewardLight.color = new Color(0.46f, 0.58f, 0.96f, 1f);
+
+        PickupInteractable pickup = rewardRoot.gameObject.AddComponent<PickupInteractable>();
+        pickup.Configure(
+            "ash_parlor_rift_whisper",
+            "裂隙中的低语",
+            "拾起结晶",
+            true,
+            "叙事线索",
+            "一块从残响体内掉落的结晶。凑近耳边，能听到模糊的声音：'……第三层……门后面……不要打开……'",
+            "伊尔萨恩",
+            new[]
+            {
+                "这块结晶还是温热的。里面有人在说话。",
+                "第三层……记住了。"
+            });
+        pickup.SetPickupEnabled(false);
+        _ashParlorController?.RegisterRiskRewardPickup(pickup);
+    }
+
+    private AshParlorBrazierInteractable BuildAshParlorBrazier(Transform roomRoot, StandardRoomTemplate template, string objectName, float localX, int index)
+    {
+        Transform brazierRoot = CreateGroup(
+            roomRoot,
+            objectName,
+            new Vector3(localX, 0f, template.WalkDepth + BrazierLocalZOffset));
+
+        List<Renderer> renderers = new List<Renderer>();
+        renderers.Add(CreateDecorBlock(brazierRoot, "Pedestal", new Vector3(0f, 0.34f, 0f), new Vector3(0.86f, 0.68f, 0.86f), new Color(0.22f, 0.2f, 0.19f)));
+        renderers.Add(CreateDecorBlock(brazierRoot, "Bowl", new Vector3(0f, 0.92f, 0.04f), new Vector3(1.08f, 0.18f, 1.08f), new Color(0.3f, 0.24f, 0.2f)));
+        renderers.Add(CreateDecorBlock(brazierRoot, "Ember", new Vector3(0f, 1.1f, 0.04f), new Vector3(0.5f, 0.34f, 0.5f), new Color(0.28f, 0.2f, 0.16f)));
+
+        Transform lightRoot = CreateGroup(brazierRoot, "Glow", new Vector3(0f, 1.18f, 0.04f));
+        Light flameLight = lightRoot.gameObject.AddComponent<Light>();
+        flameLight.type = LightType.Point;
+        flameLight.shadows = LightShadows.None;
+        flameLight.range = 1.8f;
+        flameLight.intensity = 0.08f;
+        flameLight.color = new Color(0.46f, 0.32f, 0.22f, 1f);
+
+        BoxCollider interaction = brazierRoot.gameObject.AddComponent<BoxCollider>();
+        interaction.isTrigger = true;
+        interaction.center = new Vector3(0f, 0.96f, 0.04f);
+        interaction.size = new Vector3(1.6f, 1.8f, 1.5f);
+
+        AshParlorBrazierInteractable brazier = brazierRoot.gameObject.AddComponent<AshParlorBrazierInteractable>();
+        brazier.Configure(_ashParlorController, index, flameLight, renderers.ToArray());
+        return brazier;
+    }
+
+    private void BuildAshParlorExit(Transform roomRoot, StandardRoomTemplate template)
+    {
+        Transform exitRoot = CreateGroup(
+            roomRoot,
+            "AshParlor_Exit",
+            new Vector3(ExitLocalX, 0f, template.WalkDepth + ExitLocalZOffset));
+
+        List<Renderer> renderers = new List<Renderer>();
+        renderers.Add(CreateDecorBlock(exitRoot, "Frame_Left", new Vector3(-0.76f, 1.65f, 0f), new Vector3(0.24f, 3.3f, 0.54f), new Color(0.24f, 0.22f, 0.21f)));
+        renderers.Add(CreateDecorBlock(exitRoot, "Frame_Right", new Vector3(0.76f, 1.65f, 0f), new Vector3(0.24f, 3.3f, 0.54f), new Color(0.24f, 0.22f, 0.21f)));
+        renderers.Add(CreateDecorBlock(exitRoot, "Frame_Top", new Vector3(0f, 3.18f, 0f), new Vector3(1.84f, 0.22f, 0.54f), new Color(0.24f, 0.22f, 0.21f)));
+        renderers.Add(CreateDecorBlock(exitRoot, "Seal", new Vector3(0f, 1.52f, 0.04f), new Vector3(1.22f, 2.7f, 0.18f), new Color(0.2f, 0.19f, 0.2f)));
+        renderers.Add(CreateDecorBlock(exitRoot, "LadderGlow", new Vector3(0f, 1.48f, -0.08f), new Vector3(0.72f, 2.2f, 0.08f), new Color(0.28f, 0.22f, 0.18f)));
+
+        Transform lightRoot = CreateGroup(exitRoot, "SealLight", new Vector3(0f, 1.8f, 0.12f));
+        Light exitLight = lightRoot.gameObject.AddComponent<Light>();
+        exitLight.type = LightType.Point;
+        exitLight.shadows = LightShadows.None;
+        exitLight.range = 2f;
+        exitLight.intensity = 0.12f;
+        exitLight.color = new Color(0.24f, 0.18f, 0.16f, 1f);
+
+        BoxCollider interaction = exitRoot.gameObject.AddComponent<BoxCollider>();
+        interaction.isTrigger = true;
+        interaction.center = new Vector3(0f, 1.55f, 0f);
+        interaction.size = new Vector3(2.4f, 3.5f, 1.4f);
+
+        AshParlorExitInteractable exitInteractable = exitRoot.gameObject.AddComponent<AshParlorExitInteractable>();
+        exitInteractable.Configure(_ashParlorController, exitLight, renderers.ToArray());
+        _ashParlorController?.RegisterExit(exitInteractable);
+    }
+
+    private static Renderer CreateDecorBlock(Transform parent, string name, Vector3 localCenter, Vector3 size, Color color)
+    {
+        GameObject block = CreatePrimitiveBlock(name, size, color);
+        block.transform.SetParent(parent, false);
+        block.transform.localPosition = localCenter;
+        return block.GetComponent<Renderer>();
+    }
+
+    private static void DisableDecorCollider(Renderer renderer)
+    {
+        if (renderer == null)
+        {
+            return;
+        }
+
+        Collider colliderComponent = renderer.GetComponent<Collider>();
+        if (colliderComponent != null)
+        {
+            colliderComponent.enabled = false;
+        }
     }
 
     private RoomCameraZone CreateRoomCameraZone(Transform roomRoot, StandardRoomTemplate template, float roomStartX, float roomEndX, int roomIndex)
@@ -296,6 +794,66 @@ public sealed class TowerInteriorSlice : MonoBehaviour
         }
     }
 
+    private void BuildAshParlorSeals()
+    {
+        BuildSealBarrier(1, "Seal_PressureDoor", registerPressure: true);
+        BuildSealBarrier(3, "Seal_FinaleDoor", registerPressure: false);
+    }
+
+    private void BuildSealBarrier(int dividerIndex, string objectName, bool registerPressure)
+    {
+        if (dividerIndex < 0 || dividerIndex >= RoomTemplates.Length - 1)
+        {
+            return;
+        }
+
+        float houseWidth = GetHouseWidth();
+        float cursorX = -houseWidth * 0.5f;
+
+        for (int i = 0; i <= dividerIndex; i++)
+        {
+            cursorX += RoomTemplates[i].Width;
+        }
+
+        StandardRoomTemplate left = RoomTemplates[dividerIndex];
+        StandardRoomTemplate right = RoomTemplates[dividerIndex + 1];
+        float doorHeight = Mathf.Min(left.DoorHeight, right.DoorHeight);
+        float barrierDepth = 1.24f;
+
+        Transform sealRoot = CreateGroup(transform, objectName, new Vector3(cursorX, 0f, left.WalkDepth + 0.18f));
+        GameObject barrier = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        barrier.name = "Barrier";
+        barrier.transform.SetParent(sealRoot, false);
+        barrier.transform.localPosition = new Vector3(0f, doorHeight * 0.5f, 0f);
+        barrier.transform.localScale = new Vector3(0.34f, doorHeight, barrierDepth);
+
+        Renderer barrierRenderer = barrier.GetComponent<Renderer>();
+        if (barrierRenderer != null)
+        {
+            Tint(barrierRenderer, new Color(0.56f, 0.3f, 0.18f));
+        }
+
+        Transform lightRoot = CreateGroup(sealRoot, "Glow", new Vector3(0f, doorHeight * 0.6f, 0f));
+        Light glow = lightRoot.gameObject.AddComponent<Light>();
+        glow.type = LightType.Point;
+        glow.shadows = LightShadows.None;
+        glow.range = 3.4f;
+        glow.intensity = 1.15f;
+        glow.color = new Color(0.82f, 0.44f, 0.22f, 1f);
+
+        AshParlorSealBarrier seal = sealRoot.gameObject.AddComponent<AshParlorSealBarrier>();
+        seal.Configure(new[] { barrierRenderer }, new[] { barrier.GetComponent<Collider>() }, glow);
+
+        if (registerPressure)
+        {
+            _ashParlorController?.RegisterPressureSeal(seal);
+        }
+        else
+        {
+            _ashParlorController?.RegisterFinaleSeal(seal);
+        }
+    }
+
     private static void ConfigureRoomLighting(Transform roomRoot, float roomStartX, float roomEndX, int roomIndex)
     {
         if (roomRoot == null)
@@ -311,43 +869,96 @@ public sealed class TowerInteriorSlice : MonoBehaviour
 
         switch (roomIndex)
         {
-            case 0:
+            case LandingRoomIndex:
                 lightingZone.Configure(
                     new Vector2(roomStartX, roomEndX),
-                    new Color(0.87f, 0.79f, 0.69f, 1f),
-                    0.7f,
-                    new Color(1f, 0.78f, 0.52f, 1f),
-                    0.28f,
-                    new Vector3(-0.16f, -0.84f, -0.52f),
-                    new Color(1f, 0.92f, 0.8f, 1f),
+                    new Color(0.28f, 0.24f, 0.2f, 1f),
                     0.24f,
-                    0.56f,
-                    0.48f,
-                    new Color(0.07f, 0.055f, 0.05f, 1f),
+                    new Color(0.9f, 0.72f, 0.46f, 1f),
+                    0.12f,
+                    new Vector3(0.02f, -1f, -0.1f),
+                    new Color(0.92f, 0.8f, 0.66f, 1f),
+                    0.08f,
+                    0.74f,
+                    0.2f,
+                    new Color(0.034f, 0.028f, 0.024f, 1f),
                     0.82f,
-                    new RoomLightingZone.LocalLightConfig(new Vector3(-15.5f, 4.18f, 4.3f), new Color(1f, 0.76f, 0.48f, 1f), 1.2f, 8.5f),
-                    new RoomLightingZone.LocalLightConfig(new Vector3(15.6f, 4.18f, 4.3f), new Color(1f, 0.76f, 0.48f, 1f), 1.2f, 8.5f),
-                    new RoomLightingZone.LocalLightConfig(new Vector3(-8.6f, 4.72f, 8.05f), new Color(0.5f, 0.64f, 0.82f, 1f), 0.45f, 6.8f),
-                    new RoomLightingZone.LocalLightConfig(new Vector3(8.6f, 4.72f, 8.05f), new Color(0.5f, 0.64f, 0.82f, 1f), 0.45f, 6.8f));
+                    new RoomLightingZone.LocalLightConfig(new Vector3(2.4f, 4.28f, 2.72f), new Color(1f, 0.82f, 0.58f, 1f), 1.38f, 8.2f),
+                    new RoomLightingZone.LocalLightConfig(new Vector3(-8.8f, 1.56f, 2.22f), new Color(0.95f, 0.67f, 0.42f, 1f), 0.48f, 3.4f),
+                    new RoomLightingZone.LocalLightConfig(new Vector3(0.2f, 1.62f, 7.04f), new Color(0.82f, 0.58f, 0.38f, 1f), 0.36f, 3.4f));
+                break;
+            case RuleRoomIndex:
+                lightingZone.Configure(
+                    new Vector2(roomStartX, roomEndX),
+                    new Color(0.22f, 0.19f, 0.17f, 1f),
+                    0.18f,
+                    new Color(0.96f, 0.56f, 0.28f, 1f),
+                    0.12f,
+                    new Vector3(0.2f, -0.98f, -0.04f),
+                    new Color(1f, 0.82f, 0.64f, 1f),
+                    0.07f,
+                    0.76f,
+                    0.14f,
+                    new Color(0.035f, 0.026f, 0.02f, 1f),
+                    0.8f,
+                    new RoomLightingZone.LocalLightConfig(new Vector3(8.6f, 1.18f, 0.6f), new Color(1f, 0.58f, 0.22f, 1f), 1.95f, 6.4f),
+                    new RoomLightingZone.LocalLightConfig(new Vector3(-7.2f, 1.56f, 2.5f), new Color(0.78f, 0.64f, 0.46f, 1f), 0.46f, 3.4f),
+                    new RoomLightingZone.LocalLightConfig(new Vector3(-12.2f, 2.02f, 6.92f), new Color(0.66f, 0.5f, 0.34f, 1f), 0.24f, 2.8f));
+                break;
+            case PressureRoomIndex:
+                lightingZone.Configure(
+                    new Vector2(roomStartX, roomEndX),
+                    new Color(0.17f, 0.145f, 0.14f, 1f),
+                    0.2f,
+                    new Color(0.68f, 0.34f, 0.22f, 1f),
+                    0.14f,
+                    new Vector3(-0.12f, -0.99f, -0.05f),
+                    new Color(0.72f, 0.56f, 0.48f, 1f),
+                    0.08f,
+                    0.78f,
+                    0.14f,
+                    new Color(0.03f, 0.02f, 0.018f, 1f),
+                    0.84f,
+                    new RoomLightingZone.LocalLightConfig(new Vector3(-1.2f, 3.48f, 3.18f), new Color(0.72f, 0.4f, 0.28f, 1f), 0.95f, 11.2f),
+                    new RoomLightingZone.LocalLightConfig(new Vector3(2.8f, 4.24f, 3.52f), new Color(0.84f, 0.48f, 0.32f, 1f), 0.88f, 6.2f),
+                    new RoomLightingZone.LocalLightConfig(new Vector3(-12.6f, 4.02f, 4.42f), new Color(0.54f, 0.28f, 0.2f, 1f), 0.34f, 4.4f));
+                break;
+            case ChoiceRoomIndex:
+                lightingZone.Configure(
+                    new Vector2(roomStartX, roomEndX),
+                    new Color(0.21f, 0.19f, 0.18f, 1f),
+                    0.18f,
+                    new Color(0.82f, 0.74f, 0.62f, 1f),
+                    0.09f,
+                    new Vector3(0f, -1f, -0.08f),
+                    new Color(0.9f, 0.84f, 0.74f, 1f),
+                    0.07f,
+                    0.72f,
+                    0.16f,
+                    new Color(0.03f, 0.028f, 0.028f, 1f),
+                    0.74f,
+                    new RoomLightingZone.LocalLightConfig(new Vector3(0.6f, 4.18f, 3.44f), new Color(0.96f, 0.82f, 0.6f, 1f), 0.72f, 6.6f),
+                    new RoomLightingZone.LocalLightConfig(new Vector3(-9.4f, 1.26f, 0.48f), new Color(0.82f, 0.38f, 0.2f, 1f), 1.25f, 5.4f),
+                    new RoomLightingZone.LocalLightConfig(new Vector3(9.4f, 1.26f, 0.48f), new Color(0.56f, 0.66f, 0.74f, 1f), 1.1f, 5.4f));
                 break;
             default:
                 lightingZone.Configure(
                     new Vector2(roomStartX, roomEndX),
-                    new Color(0.73f, 0.79f, 0.88f, 1f),
-                    0.66f,
-                    new Color(0.62f, 0.79f, 1f, 1f),
-                    0.32f,
-                    new Vector3(0.12f, -0.82f, -0.56f),
-                    new Color(0.8f, 0.9f, 1f, 1f),
-                    0.28f,
-                    0.62f,
-                    0.45f,
-                    new Color(0.045f, 0.05f, 0.065f, 1f),
-                    0.74f,
-                    new RoomLightingZone.LocalLightConfig(new Vector3(-15.2f, 4.1f, 4.36f), new Color(0.7f, 0.84f, 1f, 1f), 0.95f, 8.2f),
-                    new RoomLightingZone.LocalLightConfig(new Vector3(15.4f, 4.1f, 4.36f), new Color(0.7f, 0.84f, 1f, 1f), 0.95f, 8.2f),
-                    new RoomLightingZone.LocalLightConfig(new Vector3(-7f, 1.15f, 2.62f), new Color(0.54f, 0.82f, 1f, 1f), 0.85f, 4.9f),
-                    new RoomLightingZone.LocalLightConfig(new Vector3(-9.4f, 4.82f, 8.02f), new Color(0.46f, 0.64f, 0.86f, 1f), 0.38f, 6.6f));
+                    new Color(0.19f, 0.17f, 0.16f, 1f),
+                    0.15f,
+                    new Color(0.92f, 0.54f, 0.3f, 1f),
+                    0.09f,
+                    new Vector3(0.08f, -0.99f, -0.08f),
+                    new Color(1f, 0.76f, 0.6f, 1f),
+                    0.08f,
+                    0.78f,
+                    0.12f,
+                    new Color(0.03f, 0.022f, 0.022f, 1f),
+                    0.84f,
+                    new RoomLightingZone.LocalLightConfig(new Vector3(7.8f, 1.18f, 0.6f), new Color(1f, 0.58f, 0.22f, 1f), 1.85f, 6.2f),
+                    new RoomLightingZone.LocalLightConfig(new Vector3(15.8f, 4.26f, 1.48f), new Color(0.92f, 0.74f, 0.48f, 1f), 0.84f, 5.8f),
+                    new RoomLightingZone.LocalLightConfig(new Vector3(16.5f, 1.8f, 0.54f), new Color(0.9f, 0.66f, 0.32f, 1f), 1.28f, 6f),
+                    new RoomLightingZone.LocalLightConfig(new Vector3(-11.6f, 4.04f, 4.36f), new Color(0.68f, 0.4f, 0.24f, 1f), 0.14f, 2.8f));
                 break;
         }
     }
@@ -363,22 +974,32 @@ public sealed class TowerInteriorSlice : MonoBehaviour
 
         switch (roomIndex)
         {
-            case 0:
-                CreatePointLight(lightRoot, "Lamp_Left", new Vector3(-15.5f, 4.18f, 4.3f), new Color(1f, 0.76f, 0.48f, 1f), 1.55f, 7f);
-                CreatePointLight(lightRoot, "Lamp_Right", new Vector3(15.6f, 4.18f, 4.3f), new Color(1f, 0.76f, 0.48f, 1f), 1.55f, 7f);
-                CreateSpotLight(lightRoot, "WindowFill_Left", new Vector3(-8.6f, 4.72f, 7.9f), new Vector3(0.18f, -0.2f, -0.96f), new Color(0.48f, 0.62f, 0.82f, 1f), 0.68f, 5.8f, 88f, 62f);
-                CreateSpotLight(lightRoot, "WindowFill_Right", new Vector3(8.6f, 4.72f, 7.9f), new Vector3(-0.18f, -0.2f, -0.96f), new Color(0.48f, 0.62f, 0.82f, 1f), 0.68f, 5.8f, 88f, 62f);
+            case LandingRoomIndex:
+                CreatePendantRig(lightRoot, "TablePendant", new Vector3(2.4f, 4.28f, 2.72f), new Color(1f, 0.82f, 0.58f, 1f), 0.88f, 6.8f, new Color(1f, 0.78f, 0.52f, 1f), 1.48f, 7.8f);
+                CreateDeskLampRig(lightRoot, "DeskLamp", new Vector3(-8.8f, 1.56f, 2.22f), new Vector3(0.12f, -0.98f, -0.12f), new Color(0.95f, 0.67f, 0.42f, 1f), 0.4f, 2.9f, 0.44f, 3.2f);
+                CreateDeskLampRig(lightRoot, "RearConsoleLamp", new Vector3(0.2f, 1.62f, 7.04f), new Vector3(-0.04f, -0.98f, -0.16f), new Color(0.82f, 0.58f, 0.38f, 1f), 0.26f, 2.8f, 0.3f, 3.1f);
+                break;
+            case RuleRoomIndex:
+                CreateDeskLampRig(lightRoot, "ArchiveTaskLamp", new Vector3(-7.2f, 1.56f, 2.5f), new Vector3(0.18f, -0.98f, -0.1f), new Color(0.78f, 0.64f, 0.46f, 1f), 0.32f, 2.8f, 0.42f, 3.2f);
+                CreateDeskLampRig(lightRoot, "BackShelfLamp", new Vector3(-12.2f, 2.02f, 6.92f), new Vector3(0.18f, -0.96f, -0.12f), new Color(0.66f, 0.5f, 0.34f, 1f), 0.18f, 2.2f, 0.22f, 2.6f);
+                break;
+            case PressureRoomIndex:
+                CreatePointLight(lightRoot, "RoomWarningWash", new Vector3(-1.2f, 3.48f, 3.18f), new Color(0.72f, 0.4f, 0.28f, 1f), 0.72f, 13.2f, LightRenderMode.ForcePixel);
+                CreateSpotLight(lightRoot, "RoomWarningDown", new Vector3(-0.8f, 4.18f, 2.96f), new Vector3(-0.04f, -0.98f, -0.12f), new Color(0.76f, 0.42f, 0.28f, 1f), 1.18f, 13.8f, 112f, 82f, LightRenderMode.ForcePixel);
+                CreatePendantRig(lightRoot, "BrokenPendant", new Vector3(2.8f, 4.24f, 3.52f), new Color(0.84f, 0.48f, 0.32f, 1f), 0.48f, 5.6f, new Color(0.86f, 0.5f, 0.32f, 1f), 0.92f, 6.8f);
+                CreateSconceRig(lightRoot, "RearEmber", new Vector3(-12.6f, 4.02f, 4.42f), new Vector3(0.42f, -0.88f, -0.2f), new Color(0.54f, 0.28f, 0.2f, 1f), 0.3f, 4.2f, 0.26f, 4.4f);
+                break;
+            case ChoiceRoomIndex:
+                CreatePendantRig(lightRoot, "ChoicePendant", new Vector3(0.6f, 4.18f, 3.44f), new Color(0.96f, 0.84f, 0.62f, 1f), 0.56f, 5.8f, new Color(0.98f, 0.84f, 0.62f, 1f), 0.86f, 6.4f);
                 break;
             default:
-                CreatePointLight(lightRoot, "TaskLamp_Left", new Vector3(-15.2f, 4.1f, 4.36f), new Color(0.7f, 0.84f, 1f, 1f), 1.25f, 6.7f);
-                CreatePointLight(lightRoot, "TaskLamp_Right", new Vector3(15.4f, 4.1f, 4.36f), new Color(0.7f, 0.84f, 1f, 1f), 1.25f, 6.7f);
-                CreateSpotLight(lightRoot, "DeskScreenGlow", new Vector3(-7f, 1.15f, 2.62f), new Vector3(0.16f, 0.04f, -0.99f), new Color(0.54f, 0.82f, 1f, 1f), 0.82f, 3.9f, 74f, 50f);
-                CreateSpotLight(lightRoot, "RearWindowFill", new Vector3(-9.4f, 4.82f, 7.96f), new Vector3(0.22f, -0.18f, -0.96f), new Color(0.46f, 0.64f, 0.86f, 1f), 0.56f, 5.7f, 84f, 58f);
+                CreatePendantRig(lightRoot, "StairPendant", new Vector3(15.8f, 4.26f, 1.48f), new Color(0.92f, 0.74f, 0.48f, 1f), 0.48f, 4.8f, new Color(0.96f, 0.78f, 0.54f, 1f), 0.86f, 5.6f);
+                CreateSconceRig(lightRoot, "FinalLeftSconce", new Vector3(-11.6f, 4.04f, 4.36f), new Vector3(0.34f, -0.92f, -0.18f), new Color(0.68f, 0.4f, 0.24f, 1f), 0.14f, 2.8f, 0.12f, 2.6f);
                 break;
         }
     }
 
-    private static void CreatePointLight(Transform parent, string name, Vector3 localPosition, Color color, float intensity, float range)
+    private static void CreatePointLight(Transform parent, string name, Vector3 localPosition, Color color, float intensity, float range, LightRenderMode renderMode = LightRenderMode.Auto)
     {
         Transform lightTransform = CreateGroup(parent, name, localPosition);
         Light light = lightTransform.gameObject.AddComponent<Light>();
@@ -387,12 +1008,12 @@ public sealed class TowerInteriorSlice : MonoBehaviour
         light.intensity = intensity;
         light.range = range;
         light.shadows = LightShadows.None;
-        light.renderMode = LightRenderMode.Auto;
+        light.renderMode = renderMode;
         light.bounceIntensity = 0.2f;
         light.cullingMask = ~0;
     }
 
-    private static void CreateSpotLight(Transform parent, string name, Vector3 localPosition, Vector3 localDirection, Color color, float intensity, float range, float spotAngle, float innerSpotAngle)
+    private static void CreateSpotLight(Transform parent, string name, Vector3 localPosition, Vector3 localDirection, Color color, float intensity, float range, float spotAngle, float innerSpotAngle, LightRenderMode renderMode = LightRenderMode.Auto)
     {
         Transform lightTransform = CreateGroup(parent, name, localPosition);
         Vector3 direction = localDirection.sqrMagnitude > 0.0001f ? localDirection.normalized : Vector3.forward;
@@ -406,9 +1027,30 @@ public sealed class TowerInteriorSlice : MonoBehaviour
         light.spotAngle = spotAngle;
         light.innerSpotAngle = Mathf.Min(innerSpotAngle, spotAngle - 0.5f);
         light.shadows = LightShadows.None;
-        light.renderMode = LightRenderMode.Auto;
+        light.renderMode = renderMode;
         light.bounceIntensity = 0.15f;
         light.cullingMask = ~0;
+    }
+
+    private static void CreatePendantRig(Transform parent, string name, Vector3 localPosition, Color fillColor, float fillIntensity, float fillRange, Color downColor, float downIntensity, float downRange)
+    {
+        Transform rig = CreateGroup(parent, name, localPosition);
+        CreatePointLight(rig, "Fill", Vector3.zero, fillColor, fillIntensity, fillRange, LightRenderMode.ForcePixel);
+        CreateSpotLight(rig, "Down", Vector3.zero, new Vector3(0f, -1f, -0.08f), downColor, downIntensity, downRange, 96f, 64f, LightRenderMode.ForcePixel);
+    }
+
+    private static void CreateSconceRig(Transform parent, string name, Vector3 localPosition, Vector3 direction, Color color, float pointIntensity, float pointRange, float spotIntensity, float spotRange)
+    {
+        Transform rig = CreateGroup(parent, name, localPosition);
+        CreatePointLight(rig, "Glow", Vector3.zero, color, pointIntensity, pointRange, LightRenderMode.Auto);
+        CreateSpotLight(rig, "Throw", Vector3.zero, direction, color, spotIntensity, spotRange, 82f, 54f, LightRenderMode.ForcePixel);
+    }
+
+    private static void CreateDeskLampRig(Transform parent, string name, Vector3 localPosition, Vector3 direction, Color color, float pointIntensity, float pointRange, float spotIntensity, float spotRange)
+    {
+        Transform rig = CreateGroup(parent, name, localPosition);
+        CreatePointLight(rig, "Glow", Vector3.zero, color, pointIntensity, pointRange, LightRenderMode.Auto);
+        CreateSpotLight(rig, "Down", Vector3.zero, direction, color, spotIntensity, spotRange, 68f, 42f, LightRenderMode.ForcePixel);
     }
 
     private static float GetHouseWidth()
@@ -422,7 +1064,7 @@ public sealed class TowerInteriorSlice : MonoBehaviour
         return width;
     }
 
-    private static StandardRoomTemplate CreateLivingRoomTemplate()
+    private static StandardRoomTemplate CreateLivingRoomTemplate(string templateId)
     {
         float width = 42f;
         float depth = 8.4f;
@@ -430,7 +1072,7 @@ public sealed class TowerInteriorSlice : MonoBehaviour
         float floorThickness = 0.24f;
 
         return new StandardRoomTemplate(
-            templateId: "Living_A",
+            templateId: templateId,
             width: width,
             depth: depth,
             wallHeight: wallHeight,
@@ -450,10 +1092,10 @@ public sealed class TowerInteriorSlice : MonoBehaviour
                 new RoomBlockSpec("Backdrop", new Vector3(0f, wallHeight * 0.47f, depth - 0.09f), new Vector3(width - 0.1f, wallHeight - 0.35f, 0.14f), new Color(0.24f, 0.2f, 0.18f)),
                 new RoomBlockSpec("Skirting", new Vector3(0f, 0.27f, depth - 0.14f), new Vector3(width - 0.16f, 0.16f, 0.12f), DividerColor),
                 new RoomBlockSpec("CeilingBand", new Vector3(0f, wallHeight - 0.52f, depth - 0.12f), new Vector3(width - 0.16f, 0.14f, 0.12f), DividerColor),
-                new RoomBlockSpec("WindowFrame_Left", new Vector3(-8.6f, wallHeight - 1.7f, depth - 0.03f), new Vector3(2.8f, 1.7f, 0.08f), new Color(0.17f, 0.14f, 0.12f)),
-                new RoomBlockSpec("WindowGlass_Left", new Vector3(-8.6f, wallHeight - 1.7f, depth - 0.08f), new Vector3(2.36f, 1.34f, 0.04f), WindowColor),
-                new RoomBlockSpec("WindowFrame_Right", new Vector3(8.6f, wallHeight - 1.7f, depth - 0.03f), new Vector3(2.8f, 1.7f, 0.08f), new Color(0.17f, 0.14f, 0.12f)),
-                new RoomBlockSpec("WindowGlass_Right", new Vector3(8.6f, wallHeight - 1.7f, depth - 0.08f), new Vector3(2.36f, 1.34f, 0.04f), WindowColor)
+                new RoomBlockSpec("WallPanel_Left", new Vector3(-8.6f, wallHeight - 1.7f, depth - 0.05f), new Vector3(2.8f, 1.7f, 0.1f), new Color(0.19f, 0.15f, 0.13f)),
+                new RoomBlockSpec("WallInset_Left", new Vector3(-8.6f, wallHeight - 1.7f, depth - 0.09f), new Vector3(2.34f, 1.28f, 0.03f), WindowColor),
+                new RoomBlockSpec("WallPanel_Right", new Vector3(8.6f, wallHeight - 1.7f, depth - 0.05f), new Vector3(2.8f, 1.7f, 0.1f), new Color(0.19f, 0.15f, 0.13f)),
+                new RoomBlockSpec("WallInset_Right", new Vector3(8.6f, wallHeight - 1.7f, depth - 0.09f), new Vector3(2.34f, 1.28f, 0.03f), WindowColor)
             },
             foregroundBlocks: new[]
             {
@@ -492,11 +1134,12 @@ public sealed class TowerInteriorSlice : MonoBehaviour
             accentBlocks: new[]
             {
                 new RoomBlockSpec("GrandLamp_Left", new Vector3(-15.5f, 4.18f, 4.3f), new Vector3(0.24f, 1.14f, 0.24f), LampColor),
-                new RoomBlockSpec("GrandLamp_Right", new Vector3(15.6f, 4.18f, 4.3f), new Vector3(0.24f, 1.14f, 0.24f), new Color(0.72f, 0.67f, 0.49f))
+                new RoomBlockSpec("GrandLamp_Right", new Vector3(15.6f, 4.18f, 4.3f), new Vector3(0.24f, 1.14f, 0.24f), new Color(0.72f, 0.67f, 0.49f)),
+                new RoomBlockSpec("CenterPendant", new Vector3(0f, 4.34f, 3.82f), new Vector3(0.34f, 1.46f, 0.34f), new Color(0.74f, 0.66f, 0.44f))
             });
     }
 
-    private static StandardRoomTemplate CreateStudyRoomTemplate()
+    private static StandardRoomTemplate CreateStudyRoomTemplate(string templateId)
     {
         float width = 42f;
         float depth = 8.4f;
@@ -504,7 +1147,7 @@ public sealed class TowerInteriorSlice : MonoBehaviour
         float floorThickness = 0.24f;
 
         return new StandardRoomTemplate(
-            templateId: "Study_B",
+            templateId: templateId,
             width: width,
             depth: depth,
             wallHeight: wallHeight,
@@ -524,8 +1167,8 @@ public sealed class TowerInteriorSlice : MonoBehaviour
                 new RoomBlockSpec("Backdrop", new Vector3(0f, wallHeight * 0.47f, depth - 0.09f), new Vector3(width - 0.1f, wallHeight - 0.35f, 0.14f), new Color(0.18f, 0.2f, 0.23f)),
                 new RoomBlockSpec("Skirting", new Vector3(0f, 0.27f, depth - 0.14f), new Vector3(width - 0.16f, 0.16f, 0.12f), new Color(0.27f, 0.28f, 0.3f)),
                 new RoomBlockSpec("CeilingBand", new Vector3(0f, wallHeight - 0.52f, depth - 0.12f), new Vector3(width - 0.16f, 0.14f, 0.12f), new Color(0.27f, 0.28f, 0.3f)),
-                new RoomBlockSpec("WindowFrame_Left", new Vector3(-9.4f, wallHeight - 1.78f, depth - 0.03f), new Vector3(3.2f, 1.85f, 0.08f), new Color(0.15f, 0.16f, 0.18f)),
-                new RoomBlockSpec("WindowGlass_Left", new Vector3(-9.4f, wallHeight - 1.78f, depth - 0.08f), new Vector3(2.72f, 1.48f, 0.04f), new Color(0.17f, 0.24f, 0.31f)),
+                new RoomBlockSpec("WallPanel_Left", new Vector3(-9.4f, wallHeight - 1.78f, depth - 0.05f), new Vector3(3.2f, 1.85f, 0.1f), new Color(0.15f, 0.16f, 0.18f)),
+                new RoomBlockSpec("WallInset_Left", new Vector3(-9.4f, wallHeight - 1.78f, depth - 0.09f), new Vector3(2.72f, 1.48f, 0.03f), WindowColor),
                 new RoomBlockSpec("NoticeBoard", new Vector3(9.8f, 3.2f, depth - 0.07f), new Vector3(3.4f, 1.6f, 0.06f), new Color(0.39f, 0.31f, 0.22f))
             },
             foregroundBlocks: new[]
@@ -566,7 +1209,8 @@ public sealed class TowerInteriorSlice : MonoBehaviour
             accentBlocks: new[]
             {
                 new RoomBlockSpec("TaskLamp_Left", new Vector3(-15.2f, 4.1f, 4.36f), new Vector3(0.24f, 1.2f, 0.24f), new Color(0.63f, 0.67f, 0.82f)),
-                new RoomBlockSpec("TaskLamp_Right", new Vector3(15.4f, 4.1f, 4.36f), new Vector3(0.24f, 1.2f, 0.24f), new Color(0.63f, 0.67f, 0.82f))
+                new RoomBlockSpec("TaskLamp_Right", new Vector3(15.4f, 4.1f, 4.36f), new Vector3(0.24f, 1.2f, 0.24f), new Color(0.63f, 0.67f, 0.82f)),
+                new RoomBlockSpec("CenterPendant", new Vector3(0f, 4.3f, 3.9f), new Vector3(0.34f, 1.52f, 0.34f), new Color(0.72f, 0.7f, 0.58f))
             });
     }
 

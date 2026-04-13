@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
+using UnityEngine.UI;
 
 public sealed class UiBootstrap : MonoBehaviour
 {
@@ -14,14 +15,18 @@ public sealed class UiBootstrap : MonoBehaviour
     [SerializeField] private UiBackdropView configuredBackdropView;
     [SerializeField] private HudCanvasView configuredHudView;
     [SerializeField] private DialogueCanvasView configuredDialogueView;
+    [SerializeField] private InventoryCanvasView configuredInventoryView;
     [SerializeField] private ModalCanvasView configuredModalView;
+    [SerializeField] private FloorSummaryPanel configuredFloorSummaryView;
     [SerializeField] private RectTransform configuredWorldMarkerRoot;
 
     public UiTheme Theme { get; private set; }
     public UiStateCoordinator StateCoordinator { get; private set; }
     public HudCanvasView HudView { get; private set; }
     public DialogueCanvasView DialogueView { get; private set; }
+    public InventoryCanvasView InventoryView { get; private set; }
     public ModalCanvasView ModalView { get; private set; }
+    public FloorSummaryPanel FloorSummaryView { get; private set; }
     public UiBackdropView BackdropView { get; private set; }
 
     private RectTransform _uiRoot;
@@ -76,6 +81,18 @@ public sealed class UiBootstrap : MonoBehaviour
         return view != null;
     }
 
+    public static bool TryGetInventoryView(out InventoryCanvasView view)
+    {
+        view = Instance != null ? Instance.InventoryView : null;
+        return view != null;
+    }
+
+    public static bool TryGetFloorSummaryView(out FloorSummaryPanel view)
+    {
+        view = Instance != null ? Instance.FloorSummaryView : null;
+        return view != null;
+    }
+
     private UiTheme LoadTheme()
     {
         if (themeAsset != null)
@@ -116,7 +133,9 @@ public sealed class UiBootstrap : MonoBehaviour
         EnsureBackdropView();
         EnsureHudView();
         EnsureDialogueView();
+        EnsureInventoryView();
         EnsureModalView();
+        EnsureFloorSummaryView();
         EnsureManagerFacade();
     }
 
@@ -138,9 +157,17 @@ public sealed class UiBootstrap : MonoBehaviour
             ? configuredDialogueView
             : GetComponentInChildren<DialogueCanvasView>(true);
 
+        InventoryView = configuredInventoryView != null
+            ? configuredInventoryView
+            : GetComponentInChildren<InventoryCanvasView>(true);
+
         ModalView = configuredModalView != null
             ? configuredModalView
             : GetComponentInChildren<ModalCanvasView>(true);
+
+        FloorSummaryView = configuredFloorSummaryView != null
+            ? configuredFloorSummaryView
+            : GetComponentInChildren<FloorSummaryPanel>(true);
 
         configuredWorldMarkerRoot = configuredWorldMarkerRoot != null
             ? configuredWorldMarkerRoot
@@ -203,6 +230,22 @@ public sealed class UiBootstrap : MonoBehaviour
         DialogueView.Initialize(Theme);
     }
 
+    private void EnsureInventoryView()
+    {
+        Canvas inventoryCanvas = FindOrCreateLayerCanvas("Canvas_Inventory", 350);
+        RectTransform inventoryRoot = FindOrCreateLayerRoot(inventoryCanvas.transform, "InventoryLayer");
+        if (InventoryView == null)
+        {
+            InventoryView = inventoryRoot.GetComponent<InventoryCanvasView>();
+            if (InventoryView == null)
+            {
+                InventoryView = inventoryRoot.gameObject.AddComponent<InventoryCanvasView>();
+            }
+        }
+
+        InventoryView.Initialize(Theme);
+    }
+
     private void EnsureModalView()
     {
         FindOrCreateLayerCanvas("Canvas_Overlay", 400);
@@ -219,6 +262,22 @@ public sealed class UiBootstrap : MonoBehaviour
 
         ModalView.Initialize(Theme);
         FindOrCreateLayerCanvas("Canvas_Debug", 900);
+    }
+
+    private void EnsureFloorSummaryView()
+    {
+        Canvas summaryCanvas = FindOrCreateLayerCanvas("Canvas_FloorSummary", 550);
+        RectTransform summaryRoot = FindOrCreateLayerRoot(summaryCanvas.transform, "FloorSummaryLayer");
+        if (FloorSummaryView == null)
+        {
+            FloorSummaryView = summaryRoot.GetComponent<FloorSummaryPanel>();
+            if (FloorSummaryView == null)
+            {
+                FloorSummaryView = summaryRoot.gameObject.AddComponent<FloorSummaryPanel>();
+            }
+        }
+
+        FloorSummaryView.Initialize(Theme);
     }
 
     private void EnsureManagerFacade()
@@ -248,6 +307,11 @@ public sealed class UiBootstrap : MonoBehaviour
         if (existing != null && existing.TryGetComponent(out Canvas existingCanvas))
         {
             existingCanvas.sortingOrder = sortingOrder;
+            CanvasScaler scaler = existingCanvas.GetComponent<CanvasScaler>();
+            if (scaler != null)
+            {
+                UiFactory.ConfigureCanvasScaler(scaler);
+            }
             return existingCanvas;
         }
 

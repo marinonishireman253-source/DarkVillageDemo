@@ -23,7 +23,7 @@ public class PlayerCombat : MonoBehaviour
     public CombatantHealth Health { get; private set; }
     public float AttackCooldown => attackCooldown;
     public int AttackDamage => attackDamage;
-    public bool CanAttack => !SimpleDialogueUI.IsOpen && !Health.IsDead && Time.time >= _nextAttackTime;
+    public bool CanAttack => !SimpleDialogueUI.IsOpen && !InventoryController.IsOpen && !AshParlorChoiceOverlay.IsVisible && !FloorSummaryPanel.IsVisible && !Health.IsDead && Time.time >= _nextAttackTime;
     public event Action OnAttackStarted;
 
     private float _nextAttackTime;

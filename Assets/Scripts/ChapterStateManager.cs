@@ -4,6 +4,13 @@ using UnityEngine;
 [CreateAssetMenu(fileName = "ChapterState", menuName = "Ersarn/Chapter State")]
 public class ChapterState : ScriptableObject
 {
+    public enum ChoiceResult
+    {
+        None,
+        Risk,
+        Safe
+    }
+
     [System.Serializable]
     public class QuestEntry
     {
@@ -40,6 +47,13 @@ public class ChapterState : ScriptableObject
     // 运行时状态（不序列化）
     private static readonly Dictionary<string, bool> _runtimeFlags = new Dictionary<string, bool>();
     private static readonly HashSet<string> _runtimeCollected = new HashSet<string>();
+    private static readonly List<string> _runtimeCollectedOrder = new List<string>();
+    private static ChoiceResult _runtimeChoiceResult = ChoiceResult.None;
+
+    public static event System.Action OnCollectedItemsChanged;
+    public static event System.Action<ChoiceResult> OnChoiceResultChanged;
+
+    public static ChoiceResult CurrentChoiceResult => _runtimeChoiceResult;
 
     public static void SetFlag(string flagId, bool value)
     {
@@ -57,25 +71,50 @@ public class ChapterState : ScriptableObject
         return _runtimeFlags.TryGetValue(flagId, out bool value) && value;
     }
 
+    public static void SetChoiceResult(ChoiceResult result)
+    {
+        if (_runtimeChoiceResult == result)
+        {
+            return;
+        }
+
+        _runtimeChoiceResult = result;
+        SaveSystem.MarkDirty();
+        OnChoiceResultChanged?.Invoke(_runtimeChoiceResult);
+    }
+
     public static void CollectItem(string itemId)
     {
-        if (!string.IsNullOrWhiteSpace(itemId))
+        if (string.IsNullOrWhiteSpace(itemId))
         {
-            _runtimeCollected.Add(itemId);
-            SaveSystem.MarkDirty();
+            return;
         }
+
+        string normalizedItemId = itemId.Trim();
+        if (!_runtimeCollected.Add(normalizedItemId))
+        {
+            return;
+        }
+
+        _runtimeCollectedOrder.Add(normalizedItemId);
+        SaveSystem.MarkDirty();
+        OnCollectedItemsChanged?.Invoke();
     }
 
     public static bool HasItem(string itemId)
     {
-        return !string.IsNullOrWhiteSpace(itemId) && _runtimeCollected.Contains(itemId);
+        return !string.IsNullOrWhiteSpace(itemId) && _runtimeCollected.Contains(itemId.Trim());
     }
 
     public static void ResetRuntime()
     {
         _runtimeFlags.Clear();
         _runtimeCollected.Clear();
+        _runtimeCollectedOrder.Clear();
+        _runtimeChoiceResult = ChoiceResult.None;
         SaveSystem.MarkDirty();
+        OnCollectedItemsChanged?.Invoke();
+        OnChoiceResultChanged?.Invoke(_runtimeChoiceResult);
     }
 
     public static Dictionary<string, bool> GetRuntimeFlagsSnapshot()
@@ -85,15 +124,15 @@ public class ChapterState : ScriptableObject
 
     public static string[] GetCollectedItemsSnapshot()
     {
-        string[] result = new string[_runtimeCollected.Count];
-        _runtimeCollected.CopyTo(result);
-        return result;
+        return _runtimeCollectedOrder.ToArray();
     }
 
-    public static void RestoreRuntimeState(Dictionary<string, bool> flags, IEnumerable<string> collectedItems)
+    public static void RestoreRuntimeState(Dictionary<string, bool> flags, IEnumerable<string> collectedItems, ChoiceResult choiceResult = ChoiceResult.None)
     {
         _runtimeFlags.Clear();
         _runtimeCollected.Clear();
+        _runtimeCollectedOrder.Clear();
+        _runtimeChoiceResult = choiceResult;
 
         if (flags != null)
         {
@@ -117,8 +156,15 @@ public class ChapterState : ScriptableObject
                     continue;
                 }
 
-                _runtimeCollected.Add(itemId);
+                string normalizedItemId = itemId.Trim();
+                if (_runtimeCollected.Add(normalizedItemId))
+                {
+                    _runtimeCollectedOrder.Add(normalizedItemId);
+                }
             }
         }
+
+        OnCollectedItemsChanged?.Invoke();
+        OnChoiceResultChanged?.Invoke(_runtimeChoiceResult);
     }
 }

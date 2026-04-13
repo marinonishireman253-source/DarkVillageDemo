@@ -59,15 +59,7 @@ public class QuestTrackerUI : MonoBehaviour
             hudView.HideCompletionBanner();
         }
 
-        bool showMarker = !tracker.IsCompleted && tracker.CurrentTarget != null && Camera.main != null;
-        if (showMarker)
-        {
-            hudView.SetWorldMarker(true, Camera.main, tracker.CurrentTarget.position + Vector3.up * 2.4f, tracker.CurrentMarkerText);
-        }
-        else
-        {
-            hudView.HideWorldMarker();
-        }
+        hudView.HideWorldMarker();
     }
 
     private void HideCanvasView()

@@ -1,6 +1,7 @@
 using System.Collections;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
+using UnityEngine.Rendering;
 using UnityEngine.SceneManagement;
 
 public class GameBootstrap : MonoBehaviour
@@ -79,12 +80,19 @@ public class GameBootstrap : MonoBehaviour
         }
 
         PlayerMover player = EnsurePlayer();
-        ConfigurePlayerMovement(player);
         EnsureSystems();
+        EnsureBackgroundMusic();
+        ConfigurePlayerMovement(player);
+        EnsurePlayerSplash(player);
+        EnsureInteriorLighting();
         EnsureUi();
+        EnsureInventory();
         TowerInteriorSlice.Ensure(player);
         QuestTracker.Instance?.ClearObjective();
         EnsureCamera(player);
+        EnsureWetFloor();
+        EnsureRain();
+        EnsurePuddleZones();
         StartCoroutine(FinalizeSceneSetupNextFrame(player));
     }
 
@@ -104,9 +112,17 @@ public class GameBootstrap : MonoBehaviour
         }
 
         ConfigurePlayerMovement(player);
+        EnsurePlayerSplash(player);
+        EnsureInteriorLighting();
+        EnsureBackgroundMusic();
+        EnsureUi();
+        EnsureInventory();
         TowerInteriorSlice.Ensure(player);
         QuestTracker.Instance?.ClearObjective();
         EnsureCamera(player);
+        EnsureWetFloor();
+        EnsureRain();
+        EnsurePuddleZones();
     }
 
     private PlayerMover EnsurePlayer()
@@ -171,6 +187,12 @@ public class GameBootstrap : MonoBehaviour
             cameraRoot.AddComponent<AudioListener>();
         }
 
+        AudioListener audioListener = cameraRoot.GetComponent<AudioListener>();
+        if (audioListener != null && !audioListener.enabled)
+        {
+            audioListener.enabled = true;
+        }
+
         if (cameraRoot.GetComponent<UniversalAdditionalCameraData>() == null)
         {
             cameraRoot.AddComponent<UniversalAdditionalCameraData>();
@@ -207,6 +229,17 @@ public class GameBootstrap : MonoBehaviour
         }
     }
 
+    private void EnsureBackgroundMusic()
+    {
+        BackgroundMusicPlayer backgroundMusicPlayer = FindFirstObjectByType<BackgroundMusicPlayer>();
+        if (backgroundMusicPlayer == null)
+        {
+            backgroundMusicPlayer = new GameObject("BackgroundMusicPlayer").AddComponent<BackgroundMusicPlayer>();
+        }
+
+        backgroundMusicPlayer.RefreshForActiveScene();
+    }
+
     private void EnsureUi()
     {
         if (FindFirstObjectByType<UiBootstrap>() == null)
@@ -234,9 +267,14 @@ public class GameBootstrap : MonoBehaviour
             new GameObject("ChapterCompleteOverlay").AddComponent<ChapterCompleteOverlay>();
         }
 
-        if (FindFirstObjectByType<CombatHud>() == null)
+        if (FindFirstObjectByType<AshParlorChoiceOverlay>() == null)
         {
-            new GameObject("CombatHud").AddComponent<CombatHud>();
+            new GameObject("AshParlorChoiceOverlay").AddComponent<AshParlorChoiceOverlay>();
+        }
+
+        if (FindFirstObjectByType<PlayerStatusHud>() == null)
+        {
+            new GameObject("PlayerStatusHud").AddComponent<PlayerStatusHud>();
         }
 
         if (FindFirstObjectByType<DialogueRunner>() == null)
@@ -269,6 +307,64 @@ public class GameBootstrap : MonoBehaviour
             DialogueVoicePlayer voicePlayer = new GameObject("DialogueVoicePlayer").AddComponent<DialogueVoicePlayer>();
             voicePlayer.LoadDefaultClips();
         }
+    }
+
+    private void EnsureInventory()
+    {
+        if (FindFirstObjectByType<InventoryController>() == null)
+        {
+            new GameObject("InventoryController").AddComponent<InventoryController>();
+        }
+    }
+
+    private void EnsureInteriorLighting()
+    {
+        RenderSettings.sun = null;
+        RenderSettings.ambientMode = AmbientMode.Flat;
+        RenderSettings.ambientLight = new Color(0.08f, 0.07f, 0.065f, 1f);
+        RenderSettings.ambientIntensity = 0.22f;
+        RenderSettings.fog = false;
+
+        Light[] lights = FindObjectsByType<Light>(FindObjectsSortMode.None);
+        for (int i = 0; i < lights.Length; i++)
+        {
+            Light light = lights[i];
+            if (light == null || light.type != LightType.Directional)
+            {
+                continue;
+            }
+
+            light.enabled = false;
+            light.intensity = 0f;
+        }
+    }
+
+    private void EnsureWetFloor()
+    {
+        WetFloorSetup.Ensure();
+    }
+
+    private void EnsureRain()
+    {
+        RainSystem.Disable();
+    }
+
+    private void EnsurePlayerSplash(PlayerMover player)
+    {
+        if (player == null)
+        {
+            return;
+        }
+
+        if (player.GetComponent<PlayerSplashEffect>() == null)
+        {
+            player.gameObject.AddComponent<PlayerSplashEffect>();
+        }
+    }
+
+    private void EnsurePuddleZones()
+    {
+        PuddleZoneSetup.Ensure();
     }
 
     private bool IsMainScene()

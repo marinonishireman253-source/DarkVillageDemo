@@ -122,25 +122,51 @@ public sealed class RoomLightingZone : MonoBehaviour
             return false;
         }
 
-        float bestDistance = float.PositiveInfinity;
+        float totalWeight = 0f;
+        Vector3 blendedPosition = Vector3.zero;
+        Vector4 blendedColor = Vector4.zero;
+        float blendedIntensity = 0f;
+        float blendedRange = 0f;
+
+        float fallbackDistance = float.PositiveInfinity;
         bool found = false;
 
         for (int index = 0; index < _localLights.Length; index++)
         {
             LocalLightConfig localLight = _localLights[index];
             Vector3 worldLightPosition = transform.TransformPoint(localLight.LocalPosition);
-            float distance = (worldLightPosition - worldPosition).sqrMagnitude;
-            if (distance >= bestDistance)
+
+            float distance = Vector3.Distance(worldLightPosition, worldPosition);
+            float influence = 1f - Mathf.Clamp01(distance / Mathf.Max(0.01f, localLight.Range));
+            float weight = influence * influence * Mathf.Max(0.15f, localLight.Intensity);
+
+            if (weight > 0.0001f)
             {
-                continue;
+                totalWeight += weight;
+                blendedPosition += worldLightPosition * weight;
+                blendedColor += (Vector4)(localLight.Color * localLight.Intensity) * weight;
+                blendedIntensity += localLight.Intensity * weight;
+                blendedRange += localLight.Range * weight;
+                found = true;
             }
 
-            bestDistance = distance;
-            lightPosition = worldLightPosition;
-            lightColor = localLight.Color;
-            lightIntensity = localLight.Intensity;
-            lightRange = localLight.Range;
-            found = true;
+            if (distance < fallbackDistance)
+            {
+                fallbackDistance = distance;
+                lightPosition = worldLightPosition;
+                lightColor = localLight.Color;
+                lightIntensity = localLight.Intensity;
+                lightRange = localLight.Range;
+            }
+        }
+
+        if (found && totalWeight > 0.0001f)
+        {
+            float inverseWeight = 1f / totalWeight;
+            lightPosition = blendedPosition * inverseWeight;
+            lightColor = (Color)(blendedColor * inverseWeight);
+            lightIntensity = blendedIntensity * inverseWeight;
+            lightRange = blendedRange * inverseWeight;
         }
 
         return found;

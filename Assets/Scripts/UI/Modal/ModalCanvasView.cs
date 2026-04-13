@@ -1,102 +1,13 @@
 using System;
 using TMPro;
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 public sealed class ModalCanvasView : MonoBehaviour
 {
-    private sealed class ModalButtonChrome : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerDownHandler, IPointerUpHandler, ISelectHandler, IDeselectHandler
-    {
-        public Image Background { get; set; }
-        public Image Border { get; set; }
-        public Image Underline { get; set; }
-        public TMP_Text Label { get; set; }
-        public Color NormalBackground { get; set; }
-        public Color HoverBackground { get; set; }
-        public Color PressedBackground { get; set; }
-        public Color NormalLabel { get; set; }
-        public Color HoverLabel { get; set; }
-        public Color PressedLabel { get; set; }
-        public bool IsSecondary { get; set; }
-
-        private bool _hovered;
-        private bool _selected;
-        private bool _pressed;
-
-        private void Awake()
-        {
-            ApplyState();
-        }
-
-        public void OnPointerEnter(PointerEventData eventData)
-        {
-            _hovered = true;
-            ApplyState();
-        }
-
-        public void OnPointerExit(PointerEventData eventData)
-        {
-            _hovered = false;
-            _pressed = false;
-            ApplyState();
-        }
-
-        public void OnPointerDown(PointerEventData eventData)
-        {
-            _pressed = true;
-            ApplyState();
-        }
-
-        public void OnPointerUp(PointerEventData eventData)
-        {
-            _pressed = false;
-            ApplyState();
-        }
-
-        public void OnSelect(BaseEventData eventData)
-        {
-            _selected = true;
-            ApplyState();
-        }
-
-        public void OnDeselect(BaseEventData eventData)
-        {
-            _selected = false;
-            _pressed = false;
-            ApplyState();
-        }
-
-        private void ApplyState()
-        {
-            bool emphasis = _hovered || _selected;
-            if (Background != null)
-            {
-                Background.color = _pressed ? PressedBackground : (emphasis ? HoverBackground : NormalBackground);
-            }
-
-            if (Border != null)
-            {
-                Border.color = IsSecondary ? new Color(Border.color.r, Border.color.g, Border.color.b, 0f) : Border.color;
-            }
-
-            if (Label != null)
-            {
-                Label.color = _pressed ? PressedLabel : (emphasis ? HoverLabel : NormalLabel);
-            }
-
-            if (Underline != null)
-            {
-                Color underline = Underline.color;
-                underline.a = _pressed ? 0.92f : (emphasis ? 0.72f : 0f);
-                Underline.color = underline;
-            }
-        }
-    }
-
     private UiTheme _theme;
 
-    [Header("Modal Configuration (Centered)")]
+    [Header("Chapter Complete")]
     [SerializeField] private RectTransform _chapterCompleteRoot;
     [SerializeField] private TMP_Text _chapterCompleteTitle;
     [SerializeField] private TMP_Text _chapterCompleteBody;
@@ -107,12 +18,21 @@ public sealed class ModalCanvasView : MonoBehaviour
     [SerializeField] private Button _secondaryButton;
     [SerializeField] private TMP_Text _primaryLabel;
     [SerializeField] private TMP_Text _secondaryLabel;
-    [SerializeField] private Image _primaryButtonBackground;
-    [SerializeField] private Image _primaryButtonUnderline;
-    [SerializeField] private Image _secondaryButtonUnderline;
+
+    [Header("Binary Choice")]
+    [SerializeField] private RectTransform _binaryChoiceRoot;
+    [SerializeField] private TMP_Text _binaryChoiceTitle;
+    [SerializeField] private TMP_Text _binaryChoiceBody;
+    [SerializeField] private TMP_Text _binaryChoiceHint;
+    [SerializeField] private Button _leftChoiceButton;
+    [SerializeField] private Button _rightChoiceButton;
+    [SerializeField] private TMP_Text _leftChoiceLabel;
+    [SerializeField] private TMP_Text _rightChoiceLabel;
 
     private Action _primaryAction;
     private Action _secondaryAction;
+    private Action _leftChoiceAction;
+    private Action _rightChoiceAction;
 
     public void Initialize(UiTheme theme)
     {
@@ -131,7 +51,9 @@ public sealed class ModalCanvasView : MonoBehaviour
         }
 
         BuildChapterCompleteModal();
+        BuildBinaryChoiceModal();
         HideChapterComplete();
+        HideBinaryChoice();
     }
 
     public void ShowChapterComplete(string title, string body, string hintText, string primaryLabel, string secondaryLabel, Action onPrimary, Action onSecondary)
@@ -141,19 +63,23 @@ public sealed class ModalCanvasView : MonoBehaviour
             return;
         }
 
+        HideBinaryChoice();
+
         _primaryAction = onPrimary;
         _secondaryAction = onSecondary;
-
         _chapterCompleteRoot.gameObject.SetActive(true);
+
         _chapterCompleteTitle.text = string.IsNullOrWhiteSpace(title) ? "当前段落完成" : title.Trim();
         _chapterCompleteBody.text = string.IsNullOrWhiteSpace(body) ? string.Empty : body.Trim();
         _chapterCompleteHint.text = string.IsNullOrWhiteSpace(hintText) ? string.Empty : hintText.Trim();
-        _primaryLabel.text = string.IsNullOrWhiteSpace(primaryLabel) ? "确定" : primaryLabel.Trim();
+
+        SetButtonContent(_primaryButton, _primaryLabel, string.IsNullOrWhiteSpace(primaryLabel) ? "确认" : primaryLabel.Trim(), HandlePrimaryPressed);
+
         bool hasSecondary = !string.IsNullOrWhiteSpace(secondaryLabel);
-        _secondaryLabel.text = hasSecondary ? secondaryLabel.Trim() : string.Empty;
-        if (_secondaryButton != null)
+        _secondaryButton.gameObject.SetActive(hasSecondary);
+        if (hasSecondary)
         {
-            _secondaryButton.gameObject.SetActive(hasSecondary);
+            SetButtonContent(_secondaryButton, _secondaryLabel, secondaryLabel.Trim(), HandleSecondaryPressed);
         }
     }
 
@@ -168,21 +94,54 @@ public sealed class ModalCanvasView : MonoBehaviour
         _secondaryAction = null;
     }
 
+    public void ShowBinaryChoice(
+        string title,
+        string body,
+        string hintText,
+        string leftLabel,
+        string rightLabel,
+        Action onLeft,
+        Action onRight)
+    {
+        if (_binaryChoiceRoot == null)
+        {
+            return;
+        }
+
+        HideChapterComplete();
+
+        _leftChoiceAction = onLeft;
+        _rightChoiceAction = onRight;
+        _binaryChoiceRoot.gameObject.SetActive(true);
+
+        _binaryChoiceTitle.text = string.IsNullOrWhiteSpace(title) ? "做出选择" : title.Trim();
+        _binaryChoiceBody.text = string.IsNullOrWhiteSpace(body) ? string.Empty : body.Trim();
+        _binaryChoiceHint.text = string.IsNullOrWhiteSpace(hintText) ? string.Empty : hintText.Trim();
+
+        SetButtonContent(_leftChoiceButton, _leftChoiceLabel, string.IsNullOrWhiteSpace(leftLabel) ? "左侧选择" : leftLabel.Trim(), HandleLeftChoicePressed);
+        SetButtonContent(_rightChoiceButton, _rightChoiceLabel, string.IsNullOrWhiteSpace(rightLabel) ? "右侧选择" : rightLabel.Trim(), HandleRightChoicePressed);
+    }
+
+    public void HideBinaryChoice()
+    {
+        if (_binaryChoiceRoot != null)
+        {
+            _binaryChoiceRoot.gameObject.SetActive(false);
+        }
+
+        _leftChoiceAction = null;
+        _rightChoiceAction = null;
+    }
+
     public void ShowModal(string title, string body, string btn1Text, string btn2Text = "")
     {
-        ShowChapterComplete(
-            title,
-            body,
-            string.Empty,
-            btn1Text,
-            btn2Text,
-            null,
-            null);
+        ShowChapterComplete(title, body, string.Empty, btn1Text, btn2Text, null, null);
     }
 
     public void HideModal()
     {
         HideChapterComplete();
+        HideBinaryChoice();
     }
 
     private void BuildChapterCompleteModal()
@@ -196,420 +155,294 @@ public sealed class ModalCanvasView : MonoBehaviour
             Vector2.zero,
             Vector2.zero);
 
-        UiFactory.CreateImage("Backdrop", _chapterCompleteRoot, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.02f, 0.02f, 0.03f, 0.54f));
+        UiFactory.CreateImage("Backdrop", _chapterCompleteRoot, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.01f, 0.01f, 0.02f, 0.76f));
 
-        RectTransform panel = UiFactory.CreateRect(
-            "Panel",
-            _chapterCompleteRoot,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(1200f, 760f),
-            Vector2.zero);
+        RectTransform panel = CreateMainPanel(_chapterCompleteRoot, "ChapterPanel", new Vector2(980f, 640f));
 
-        CreatePanelShadow(panel, new Vector2(34f, -34f), new Vector2(48f, 44f), new Color(0f, 0f, 0f, 0.4f));
-
-        Image panelOuter = UiFactory.CreateImage("PanelOuter", panel, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.04f, 0.05f, 0.07f, 0.97f));
-        Sprite modalFrameSprite = _theme.ModalFrameSprite;
-        if (modalFrameSprite != null)
-        {
-            UiFactory.ApplySprite(panelOuter, modalFrameSprite);
-            panelOuter.color = Color.white;
-        }
-        RectTransform inner = UiFactory.CreateRect("PanelInner", panel, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-16f, -16f), Vector2.zero);
-        UiFactory.CreateImage("PanelInnerFill", inner, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.11f, 0.13f, 0.17f, 0.95f));
-        CreateLinenOverlay(inner);
-        CreateAccentLine(inner, 44f);
-        CreateHeavyCornerTrim(inner);
-        CreateBeamMotif(inner);
-
-        _chapterCompleteTitle = UiFactory.CreateText(
-            "Title",
-            inner,
+        TMP_Text eyebrow = UiFactory.CreateText(
+            "Eyebrow",
+            panel,
             new Vector2(0f, 1f),
             new Vector2(1f, 1f),
-            new Vector2(0.5f, 1f),
-            new Vector2(-160f, 68f),
-            new Vector2(0f, -64f),
+            new Vector2(0f, 1f),
+            new Vector2(-80f, 24f),
+            new Vector2(34f, -28f),
             _theme.DisplayFont,
-            42,
+            13,
             FontStyle.Normal,
             TextAnchor.MiddleLeft,
             _theme.Brass);
-        _chapterCompleteTitle.characterSpacing = 4f;
+        eyebrow.gameObject.SetActive(false);
+
+        _chapterCompleteTitle = UiFactory.CreateText(
+            "Title",
+            panel,
+            new Vector2(0f, 1f),
+            new Vector2(1f, 1f),
+            new Vector2(0f, 1f),
+            new Vector2(-80f, 58f),
+            new Vector2(34f, -74f),
+            _theme.DisplayFont,
+            40,
+            FontStyle.Bold,
+            TextAnchor.MiddleLeft,
+            _theme.PrimaryText);
 
         _chapterCompleteBody = UiFactory.CreateText(
             "Body",
-            inner,
+            panel,
             new Vector2(0f, 0f),
             new Vector2(1f, 1f),
-            new Vector2(0.5f, 1f),
-            new Vector2(-180f, -320f),
-            new Vector2(0f, -164f),
+            new Vector2(0f, 1f),
+            new Vector2(-80f, -214f),
+            new Vector2(34f, -142f),
             _theme.BodyFont,
-            26,
+            24,
             FontStyle.Normal,
             TextAnchor.UpperLeft,
-            _theme.WaxWhiteTextSoft);
+            _theme.SecondaryText);
         _chapterCompleteBody.lineSpacing = 10f;
-
-        RectTransform buttonRow = UiFactory.CreateRect(
-            "ButtonRow",
-            inner,
-            new Vector2(0.5f, 0f),
-            new Vector2(0.5f, 0f),
-            new Vector2(0.5f, 0f),
-            new Vector2(520f, 188f),
-            new Vector2(0f, 72f));
-
-        VerticalLayoutGroup buttonLayout = buttonRow.gameObject.AddComponent<VerticalLayoutGroup>();
-        buttonLayout.spacing = 20f;
-        buttonLayout.childAlignment = TextAnchor.MiddleCenter;
-        buttonLayout.childControlWidth = false;
-        buttonLayout.childControlHeight = false;
-        buttonLayout.childForceExpandWidth = false;
-        buttonLayout.childForceExpandHeight = false;
-
-        _primaryButton = CreatePrimaryModalButton(buttonRow, out _primaryLabel, out _primaryButtonBackground, out _primaryButtonUnderline);
-        _primaryButton.onClick.AddListener(InvokePrimaryAction);
-
-        _secondaryButton = CreateSecondaryModalButton(buttonRow, out _secondaryLabel, out _secondaryButtonUnderline);
-        _secondaryButton.onClick.AddListener(InvokeSecondaryAction);
 
         _chapterCompleteHint = UiFactory.CreateText(
             "Hint",
-            inner,
+            panel,
+            new Vector2(0f, 0f),
+            new Vector2(1f, 0f),
+            new Vector2(0f, 0f),
+            new Vector2(-80f, 26f),
+            new Vector2(34f, 122f),
+            _theme.BodyFont,
+            15,
+            FontStyle.Normal,
+            TextAnchor.MiddleLeft,
+            new Color(_theme.PrimaryText.r, _theme.PrimaryText.g, _theme.PrimaryText.b, 0.72f));
+
+        RectTransform buttonsRow = UiFactory.CreateRect(
+            "ButtonsRow",
+            panel,
             new Vector2(0f, 0f),
             new Vector2(1f, 0f),
             new Vector2(0.5f, 0f),
-            new Vector2(-160f, 36f),
-            new Vector2(0f, 18f),
+            new Vector2(-68f, 84f),
+            new Vector2(0f, 28f));
+
+        _primaryButton = CreateActionButton(buttonsRow, "PrimaryButton", new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(364f, 84f), new Vector2(0f, 0f), true, out _primaryLabel);
+        _secondaryButton = CreateActionButton(buttonsRow, "SecondaryButton", new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(300f, 84f), new Vector2(0f, 0f), false, out _secondaryLabel);
+    }
+
+    private void BuildBinaryChoiceModal()
+    {
+        _binaryChoiceRoot = UiFactory.CreateRect(
+            "BinaryChoiceModal",
+            transform,
+            Vector2.zero,
+            Vector2.one,
+            new Vector2(0.5f, 0.5f),
+            Vector2.zero,
+            Vector2.zero);
+
+        UiFactory.CreateImage("Backdrop", _binaryChoiceRoot, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.01f, 0.01f, 0.02f, 0.78f));
+
+        RectTransform panel = CreateMainPanel(_binaryChoiceRoot, "BinaryChoicePanel", new Vector2(1260f, 660f));
+
+        TMP_Text eyebrow = UiFactory.CreateText(
+            "Eyebrow",
+            panel,
+            new Vector2(0f, 1f),
+            new Vector2(1f, 1f),
+            new Vector2(0f, 1f),
+            new Vector2(-80f, 24f),
+            new Vector2(34f, -28f),
+            _theme.DisplayFont,
+            13,
+            FontStyle.Normal,
+            TextAnchor.MiddleLeft,
+            _theme.Brass);
+        eyebrow.gameObject.SetActive(false);
+
+        _binaryChoiceTitle = UiFactory.CreateText(
+            "Title",
+            panel,
+            new Vector2(0f, 1f),
+            new Vector2(1f, 1f),
+            new Vector2(0f, 1f),
+            new Vector2(-80f, 52f),
+            new Vector2(34f, -74f),
+            _theme.DisplayFont,
+            36,
+            FontStyle.Bold,
+            TextAnchor.MiddleLeft,
+            _theme.PrimaryText);
+
+        _binaryChoiceBody = UiFactory.CreateText(
+            "Body",
+            panel,
+            new Vector2(0f, 1f),
+            new Vector2(1f, 1f),
+            new Vector2(0f, 1f),
+            new Vector2(-80f, 56f),
+            new Vector2(34f, -132f),
             _theme.BodyFont,
-            18,
-            FontStyle.Normal,
-            TextAnchor.MiddleRight,
-            _theme.SecondaryText);
-    }
-
-    private Button CreatePrimaryModalButton(Transform parent, out TMP_Text label, out Image background, out Image underline)
-    {
-        RectTransform root = UiFactory.CreateRect(
-            "PrimaryButtonRoot",
-            parent,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(480f, 120f),
-            Vector2.zero);
-        LayoutElement layout = root.gameObject.AddComponent<LayoutElement>();
-        layout.preferredWidth = 480f;
-        layout.preferredHeight = 120f;
-
-        background = UiFactory.CreateImage(
-            "Button",
-            root,
-            Vector2.zero,
-            Vector2.one,
-            new Vector2(0.5f, 0.5f),
-            Vector2.zero,
-            Vector2.zero,
-            new Color(_theme.Charcoal.r, _theme.Charcoal.g, _theme.Charcoal.b, 0.92f));
-        Sprite primaryButtonSprite = _theme.PrimaryButtonSprite;
-        if (primaryButtonSprite != null)
-        {
-            UiFactory.ApplySprite(background, primaryButtonSprite);
-            background.color = Color.white;
-        }
-        UiFactory.CreateImage(
-            "WoodInlay",
-            root,
-            Vector2.zero,
-            Vector2.one,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(-8f, -8f),
-            Vector2.zero,
-            new Color(_theme.Slate.r, _theme.Slate.g, _theme.Slate.b, 0.52f));
-        Image border = UiFactory.CreateImage(
-            "ButtonBorder",
-            root,
-            Vector2.zero,
-            Vector2.one,
-            new Vector2(0.5f, 0.5f),
-            Vector2.zero,
-            Vector2.zero,
-            new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.66f));
-        UiFactory.CreateImage(
-            "ButtonBorderInset",
-            root,
-            Vector2.zero,
-            Vector2.one,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(-3f, -3f),
-            Vector2.zero,
-            new Color(_theme.Charcoal.r, _theme.Charcoal.g, _theme.Charcoal.b, 0.9f));
-
-        Button button = root.gameObject.AddComponent<Button>();
-        button.targetGraphic = background;
-
-        label = UiFactory.CreateText(
-            "Label",
-            root,
-            Vector2.zero,
-            Vector2.one,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(-40f, -22f),
-            Vector2.zero,
-            _theme.DisplayFont,
-            28,
-            FontStyle.Normal,
-            TextAnchor.MiddleCenter,
-            _theme.WaxWhiteText);
-        label.characterSpacing = 2f;
-
-        underline = UiFactory.CreateImage(
-            "HoverUnderline",
-            root,
-            new Vector2(0.5f, 0f),
-            new Vector2(0.5f, 0f),
-            new Vector2(0.5f, 0f),
-            new Vector2(240f, 2f),
-            new Vector2(0f, 26f),
-            new Color(_theme.EmberRed.r, _theme.EmberRed.g, _theme.EmberRed.b, 0f));
-
-        ModalButtonChrome chrome = root.gameObject.AddComponent<ModalButtonChrome>();
-        chrome.Background = background;
-        chrome.Border = border;
-        chrome.Underline = underline;
-        chrome.Label = label;
-        chrome.NormalBackground = new Color(_theme.Charcoal.r, _theme.Charcoal.g, _theme.Charcoal.b, 0.92f);
-        chrome.HoverBackground = new Color(0.12f, 0.13f, 0.15f, 0.95f);
-        chrome.PressedBackground = new Color(0.03f, 0.04f, 0.05f, 0.98f);
-        chrome.NormalLabel = _theme.WaxWhiteText;
-        chrome.HoverLabel = new Color(_theme.WaxWhiteText.r, _theme.WaxWhiteText.g * 0.95f, _theme.WaxWhiteText.b * 0.92f, 1f);
-        chrome.PressedLabel = new Color(_theme.EmberRed.r, _theme.EmberRed.g * 0.96f, _theme.EmberRed.b * 0.92f, 1f);
-
-        return button;
-    }
-
-    private Button CreateSecondaryModalButton(Transform parent, out TMP_Text label, out Image underline)
-    {
-        RectTransform root = UiFactory.CreateRect(
-            "SecondaryButtonRoot",
-            parent,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(320f, 48f),
-            Vector2.zero);
-        LayoutElement layout = root.gameObject.AddComponent<LayoutElement>();
-        layout.preferredWidth = 320f;
-        layout.preferredHeight = 48f;
-
-        Image background = UiFactory.CreateImage(
-            "Button",
-            root,
-            Vector2.zero,
-            Vector2.one,
-            new Vector2(0.5f, 0.5f),
-            Vector2.zero,
-            Vector2.zero,
-            new Color(0f, 0f, 0f, 0f));
-
-        Button button = root.gameObject.AddComponent<Button>();
-        button.targetGraphic = background;
-
-        label = UiFactory.CreateText(
-            "Label",
-            root,
-            Vector2.zero,
-            Vector2.one,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(-20f, -10f),
-            Vector2.zero,
-            _theme.DisplayFont,
             22,
             FontStyle.Normal,
-            TextAnchor.MiddleCenter,
-            new Color(_theme.DimBrass.r, _theme.DimBrass.g, _theme.DimBrass.b, 0.88f));
-        label.characterSpacing = 1.5f;
+            TextAnchor.MiddleLeft,
+            _theme.SecondaryText);
 
-        underline = UiFactory.CreateImage(
-            "HoverUnderline",
+        _binaryChoiceHint = UiFactory.CreateText(
+            "Hint",
+            panel,
+            new Vector2(0f, 0f),
+            new Vector2(1f, 0f),
+            new Vector2(0f, 0f),
+            new Vector2(-80f, 26f),
+            new Vector2(34f, 30f),
+            _theme.BodyFont,
+            15,
+            FontStyle.Normal,
+            TextAnchor.MiddleLeft,
+            new Color(_theme.PrimaryText.r, _theme.PrimaryText.g, _theme.PrimaryText.b, 0.72f));
+
+        _leftChoiceButton = CreateChoiceButton(panel, "LeftChoice", new Vector2(0f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 0f), new Vector2(-12f, 304f), new Vector2(0f, 82f), out _leftChoiceLabel);
+        _rightChoiceButton = CreateChoiceButton(panel, "RightChoice", new Vector2(0.5f, 0f), new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-12f, 304f), new Vector2(0f, 82f), out _rightChoiceLabel);
+    }
+
+    private RectTransform CreateMainPanel(Transform parent, string name, Vector2 size)
+    {
+        RectTransform panel = UiFactory.CreateRect(
+            name,
+            parent,
+            new Vector2(0.5f, 0.5f),
+            new Vector2(0.5f, 0.5f),
+            new Vector2(0.5f, 0.5f),
+            size,
+            Vector2.zero);
+        UiFactory.CreateImage("Shadow", panel, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(40f, 40f), new Vector2(22f, -22f), new Color(0f, 0f, 0f, 0.4f));
+        UiFactory.CreateImage("Outer", panel, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.03f, 0.04f, 0.06f, 0.96f));
+        RectTransform inner = UiFactory.CreateRect("Inner", panel, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-16f, -16f), Vector2.zero);
+        UiFactory.CreateImage("Fill", inner, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.08f, 0.1f, 0.14f, 0.98f));
+        UiFactory.CreateImage("LeftAccent", inner, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f), new Vector2(4f, -40f), Vector2.zero, new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.92f));
+        return inner;
+    }
+
+    private Button CreateActionButton(
+        Transform parent,
+        string name,
+        Vector2 anchorMin,
+        Vector2 anchorMax,
+        Vector2 pivot,
+        Vector2 sizeDelta,
+        Vector2 anchoredPosition,
+        bool primary,
+        out TMP_Text label)
+    {
+        RectTransform root = UiFactory.CreateRect(name, parent, anchorMin, anchorMax, pivot, sizeDelta, anchoredPosition);
+        Image background = UiFactory.CreateImage("Background", root, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero,
+            primary
+                ? new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.22f)
+                : new Color(1f, 1f, 1f, 0.05f));
+        UiFactory.CreateImage("Outline", root, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-2f, -2f), Vector2.zero,
+            primary
+                ? new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.42f)
+                : new Color(_theme.PrimaryText.r, _theme.PrimaryText.g, _theme.PrimaryText.b, 0.16f));
+
+        label = UiFactory.CreateText(
+            "Label",
             root,
-            new Vector2(0.5f, 0f),
-            new Vector2(0.5f, 0f),
-            new Vector2(0.5f, 0f),
-            new Vector2(120f, 2f),
-            new Vector2(0f, 6f),
-            new Color(_theme.EmberRed.r, _theme.EmberRed.g, _theme.EmberRed.b, 0f));
+            Vector2.zero,
+            Vector2.one,
+            new Vector2(0.5f, 0.5f),
+            new Vector2(-32f, -18f),
+            Vector2.zero,
+            _theme.BodyFont,
+            22,
+            FontStyle.Bold,
+            TextAnchor.MiddleCenter,
+            _theme.PrimaryText);
+        label.textWrappingMode = TextWrappingModes.Normal;
 
-        ModalButtonChrome chrome = root.gameObject.AddComponent<ModalButtonChrome>();
-        chrome.Background = background;
-        chrome.Underline = underline;
-        chrome.Label = label;
-        chrome.NormalBackground = new Color(0f, 0f, 0f, 0f);
-        chrome.HoverBackground = new Color(0f, 0f, 0f, 0f);
-        chrome.PressedBackground = new Color(0f, 0f, 0f, 0f);
-        chrome.NormalLabel = new Color(_theme.DimBrass.r, _theme.DimBrass.g, _theme.DimBrass.b, 0.88f);
-        chrome.HoverLabel = new Color(_theme.WaxWhiteText.r, _theme.WaxWhiteText.g, _theme.WaxWhiteText.b, 0.94f);
-        chrome.PressedLabel = new Color(_theme.EmberRed.r, _theme.EmberRed.g, _theme.EmberRed.b, 0.92f);
-        chrome.IsSecondary = true;
-
+        Button button = root.gameObject.AddComponent<Button>();
+        button.targetGraphic = background;
         return button;
     }
 
-    private void InvokePrimaryAction()
+    private Button CreateChoiceButton(
+        Transform parent,
+        string name,
+        Vector2 anchorMin,
+        Vector2 anchorMax,
+        Vector2 pivot,
+        Vector2 sizeDelta,
+        Vector2 anchoredPosition,
+        out TMP_Text label)
+    {
+        RectTransform root = UiFactory.CreateRect(name, parent, anchorMin, anchorMax, pivot, sizeDelta, anchoredPosition);
+        if (anchorMin.x == 0f)
+        {
+            root.offsetMin = new Vector2(34f, anchoredPosition.y);
+            root.offsetMax = new Vector2(-8f, anchoredPosition.y + sizeDelta.y);
+        }
+        else
+        {
+            root.offsetMin = new Vector2(8f, anchoredPosition.y);
+            root.offsetMax = new Vector2(-34f, anchoredPosition.y + sizeDelta.y);
+        }
+
+        Image background = UiFactory.CreateImage("Background", root, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(1f, 1f, 1f, 0.05f));
+        UiFactory.CreateImage("Outline", root, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-2f, -2f), Vector2.zero, new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.18f));
+        UiFactory.CreateImage("TopAccent", root, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), new Vector2(-28f, 2f), new Vector2(0f, -1f), new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.4f));
+
+        label = UiFactory.CreateText(
+            "Label",
+            root,
+            Vector2.zero,
+            Vector2.one,
+            new Vector2(0.5f, 0.5f),
+            new Vector2(-34f, -30f),
+            Vector2.zero,
+            _theme.BodyFont,
+            22,
+            FontStyle.Bold,
+            TextAnchor.MiddleLeft,
+            _theme.PrimaryText);
+        label.textWrappingMode = TextWrappingModes.Normal;
+
+        Button button = root.gameObject.AddComponent<Button>();
+        button.targetGraphic = background;
+        return button;
+    }
+
+    private void SetButtonContent(Button button, TMP_Text label, string content, Action callback)
+    {
+        if (button == null || label == null)
+        {
+            return;
+        }
+
+        label.text = content;
+        button.onClick.RemoveAllListeners();
+        if (callback != null)
+        {
+            button.onClick.AddListener(() => callback());
+        }
+    }
+
+    private void HandlePrimaryPressed()
     {
         _primaryAction?.Invoke();
     }
 
-    private void InvokeSecondaryAction()
+    private void HandleSecondaryPressed()
     {
         _secondaryAction?.Invoke();
     }
 
-    private void CreatePanelShadow(RectTransform panel, Vector2 offset, Vector2 expand, Color color)
+    private void HandleLeftChoicePressed()
     {
-        Image shadow = UiFactory.CreateImage(
-            "PanelShadow",
-            panel,
-            Vector2.zero,
-            Vector2.one,
-            new Vector2(0.5f, 0.5f),
-            expand,
-            offset,
-            color);
-        shadow.raycastTarget = false;
-        shadow.transform.SetAsFirstSibling();
+        _leftChoiceAction?.Invoke();
     }
 
-    private void CreateAccentLine(Transform parent, float inset)
+    private void HandleRightChoicePressed()
     {
-        Image line = UiFactory.CreateImage(
-            "AccentLine",
-            parent,
-            new Vector2(0f, 1f),
-            new Vector2(1f, 1f),
-            new Vector2(0.5f, 1f),
-            new Vector2(-(inset * 2f), 2f),
-            new Vector2(0f, -1f),
-            new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.72f));
-        line.raycastTarget = false;
-    }
-
-    private void CreateCornerBrackets(Transform parent, float inset, float length, Color color)
-    {
-        CreateCornerBracket(parent, "TopLeft", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), inset, -inset, length, 2f, color);
-        CreateCornerBracket(parent, "TopRight", new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), -inset, -inset, length, 2f, color);
-        CreateCornerBracket(parent, "BottomLeft", new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(0f, 0f), inset, inset, length, 2f, color);
-        CreateCornerBracket(parent, "BottomRight", new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(1f, 0f), -inset, inset, length, 2f, color);
-    }
-
-    private void CreateCornerBracket(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, float x, float y, float length, float thickness, Color color)
-    {
-        Image horizontal = UiFactory.CreateImage(
-            $"{name}_H",
-            parent,
-            anchorMin,
-            anchorMax,
-            pivot,
-            new Vector2(length, thickness),
-            new Vector2(x, y),
-            color);
-        horizontal.raycastTarget = false;
-
-        Image vertical = UiFactory.CreateImage(
-            $"{name}_V",
-            parent,
-            anchorMin,
-            anchorMax,
-            pivot,
-            new Vector2(thickness, length),
-            new Vector2(x, y),
-            color);
-        vertical.raycastTarget = false;
-    }
-
-    private void CreateHeavyCornerTrim(Transform parent)
-    {
-        Color brass = new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.72f);
-        CreateHeavyCorner(parent, "TopLeft", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), 24f, -24f, 96f, 8f, brass);
-        CreateHeavyCorner(parent, "TopRight", new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), -24f, -24f, 96f, 8f, brass);
-        CreateHeavyCorner(parent, "BottomLeft", new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(0f, 0f), 24f, 24f, 96f, 8f, brass);
-        CreateHeavyCorner(parent, "BottomRight", new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(1f, 0f), -24f, 24f, 96f, 8f, brass);
-    }
-
-    private void CreateHeavyCorner(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, float x, float y, float length, float thickness, Color color)
-    {
-        CreateCornerBracket(parent, $"{name}_Outer", anchorMin, anchorMax, pivot, x, y, length, thickness, color);
-        CreateCornerBracket(parent, $"{name}_Inner", anchorMin, anchorMax, pivot, x + Mathf.Sign(x) * -10f, y + Mathf.Sign(y) * -10f, length * 0.58f, 3f, new Color(color.r, color.g, color.b, 0.34f));
-    }
-
-    private void CreateBeamMotif(Transform parent)
-    {
-        Image topBeam = UiFactory.CreateImage(
-            "TopBeam",
-            parent,
-            new Vector2(0.5f, 1f),
-            new Vector2(0.5f, 1f),
-            new Vector2(0.5f, 1f),
-            new Vector2(220f, 2f),
-            new Vector2(0f, -108f),
-            new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.16f));
-        topBeam.raycastTarget = false;
-
-        Image bottomBeam = UiFactory.CreateImage(
-            "BottomBeam",
-            parent,
-            new Vector2(0.5f, 0f),
-            new Vector2(0.5f, 0f),
-            new Vector2(0.5f, 0f),
-            new Vector2(220f, 2f),
-            new Vector2(0f, 126f),
-            new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.12f));
-        bottomBeam.raycastTarget = false;
-    }
-
-    private void CreateLinenOverlay(Transform parent)
-    {
-        RectTransform linenRoot = UiFactory.CreateRect(
-            "LinenOverlay",
-            parent,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(880f, 500f),
-            new Vector2(0f, -12f));
-        linenRoot.SetAsLastSibling();
-
-        for (int i = 0; i < 8; i++)
-        {
-            float y = 200f - (i * 58f);
-            Image thread = UiFactory.CreateImage(
-                $"LinenH_{i}",
-                linenRoot,
-                new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f),
-                new Vector2(760f, 1f),
-                new Vector2(0f, y),
-                new Color(_theme.PrimaryText.r, _theme.PrimaryText.g, _theme.PrimaryText.b, 0.018f));
-            thread.raycastTarget = false;
-        }
-
-        for (int i = 0; i < 6; i++)
-        {
-            float x = -260f + (i * 104f);
-            Image thread = UiFactory.CreateImage(
-                $"LinenV_{i}",
-                linenRoot,
-                new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f),
-                new Vector2(1f, 340f),
-                new Vector2(x, 0f),
-                new Color(_theme.PrimaryText.r, _theme.PrimaryText.g, _theme.PrimaryText.b, 0.014f));
-            thread.raycastTarget = false;
-        }
+        _rightChoiceAction?.Invoke();
     }
 }

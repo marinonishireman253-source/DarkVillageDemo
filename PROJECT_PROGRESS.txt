@@ -102,6 +102,385 @@
 - Assets/Scripts/TriggerZoneObjective.cs
 
 ## 最新记录
+- 时间：2026-04-13 15:53 CST
+- 动作：完成灰烬客厅五段式切片节奏锚点 task2
+- 修改文件：
+  - Assets/Scripts/AshParlorRunController.cs
+  - Assets/Scripts/TowerInteriorSlice.cs
+  - Assets/Scripts/CombatVfxFactory.cs
+  - Assets/Resources/Dialogue/AshParlor_LandingMonologue.asset
+  - Assets/Resources/Dialogue/AshParlor_LandingMonologue.asset.meta
+  - Assets/Resources/Dialogue.meta
+  - PROJECT_PROGRESS.txt
+- 实现内容：
+  1. 落地房首次进入后现在会延迟 1 秒自动触发 `DialogueRunner` 独白，独白内容改为从新的 `AshParlor_LandingMonologue` 资源读取，不再依赖旧的落地房触发框
+  2. 压力房进入时不再立刻激活敌人，而是先执行 1.5 秒预警：房间灯光在 0.5 秒内压到 30%，若后续补上 `warningClip` 可直接播放低沉预警音；预警结束后敌人再启用，灯光只恢复到 60%
+  3. 第二盏烛台点亮时会触发全场灯光闪光，并在烛台上方生成暖黄色上升飘散粒子，增强终局房的通关冲击
+  4. 根据编辑器回看结果补强了压力房预警的可见性：除了压力房本体灯光下压，其他场景灯也会同步轻微下沉，避免玩家刚踩进房间边界时因为镜头还没完全切入而感受不到预警
+  5. 继续补了一层覆盖整间压力房的大范围洗光 / 顶打光，让预警 dim 不再只落在局部灯附近，镜头里能看到整间房一起变暗
+  6. 修正终局粒子初始化顺序：先停止默认自动播放，再配置 `duration/playOnAwake`，消除 `Setting the duration while system is still playing` warning
+  7. 按实机反馈移除了两盏烛台点亮成功后的即时文案，只保留条件不足/重复交互时的提示，避免 UI 遮住点灯粒子和闪光反馈
+  8. 继续加重压力房预警力度：不再只是局部灯轻微变暗，而是把压力房灯、其他场景灯和 `RenderSettings` 环境光一起快速压低，确保玩家一进压力房就能明显看到整层亮度塌下去
+  9. 根据“第三间几乎没灯”的实机反馈，重新抬高压力房常驻灯组与本房间光照参数，先解决常态下房间无照明感的问题，再让预警在此基础上制造反差
+  10. 按最新实机要求把压力房预警直接改成全黑：预警阶段将压力房灯、其他场景灯和环境光一起压到 0，结束后再恢复，避免“只是变暗但还是不明显”
+  11. 为了确保敌人绝不会在 1.5 秒预警内提前行动，压力房敌人现在注册时直接 `SetActive(false)`，等预警协程结束后再激活并开放 encounter
+  12. 已接入压力房预警音效默认资源：把 `Cello_at_First_Light.mp3` 放入 `Assets/Resources/Audio/Sfx/`，`AshParlorRunController` 运行时会自动加载并只播放一次；若后续手动指定 `warningClip`，则仍优先使用手动配置
+- 当前验证：
+  - 已完成代码级静态检查
+  - `git diff --check` 已通过
+  - 尚未在 Unity 编辑器内实机验证独白触发、压力房灯光节奏和终局粒子表现
+- 下一步：
+  1. 回 Unity 重编译后进入 `Main` 场景，确认落地房独白会自动播放且结束后恢复移动
+  2. 重点检查压力房预警是否先 dim 再刷敌，以及预警结束后灯光稳定停在 60%
+  3. 检查第二盏烛台点亮时的闪光和粒子是否足够明显；如果太弱，再只调 `finaleFlashPeakMultiplier` 和粒子发射量
+- 时间：2026-04-12 21:19 Asia/Shanghai
+- 动作：确认剩余模糊主要来自字体选型，并切换到系统屏幕字体优先
+- 修改文件：
+  - Assets/Scripts/UI/Core/UiTheme.cs
+  - Assets/Resources/UI/DefaultUiTheme.asset
+  - PROJECT_PROGRESS.txt
+- 实现内容：
+  1. 核对后确认高精度 TMP 字体资产已经生成成功，说明“还是模糊”不再主要是精度不足
+  2. 继续排查后发现当前主题长期锁定 `Songti.ttc`，且实际命中 `Songti SC Black`，这类粗黑衬线字并不适合长段中文 UI，天然更容易显得发糊
+  3. 现在默认 UI 主题不再强绑项目内 `Songti`，改为优先使用系统屏幕字体；在当前 mac 环境下会优先命中 `PingFang SC`
+  4. 仅当系统字体不可用时，才再回退到项目内字体资源
+- 当前验证：
+  - 已完成代码级静态检查
+  - `git diff --check` 已通过
+  - 尚未在 Unity 中肉眼确认人物面板和对话是否已经切到 `PingFang SC`
+- 下一步：
+  1. 回 Unity 重新编译后打开人物面板或对话框
+  2. 优先确认运行中的正文是否已经不再使用 `Songti SC Black`
+  3. 如果仍有局部模糊，再继续记录运行时实际 font name，把问题缩到单一控件
+- 时间：2026-04-12 21:15 Asia/Shanghai
+- 动作：强制切换到超高精度 TMP 字体方案
+- 修改文件：
+  - Assets/Scripts/UI/Core/UiFactory.cs
+  - Assets/Editor/TmpFontAssetBuilder.cs
+  - Assets/Resources/Fonts/TMP/Songti SDF.asset
+  - Assets/Resources/Fonts/TMP/Baskerville SDF.asset
+  - PROJECT_PROGRESS.txt
+- 实现内容：
+  1. 把运行时和编辑器字体生成参数统一提高到 `256pt / padding 16 / 8192 atlas`
+  2. `UiFactory` 现在只接受超高精度 TMP 字体资产，低于该阈值的预生成字体会被直接拒绝
+  3. 尝试使用 Unity batchmode 直接重建字体资产，但被当前已打开的 Unity 实例拦截
+  4. 为了强制完成切换，已删除旧的低精度 `Songti SDF.asset` 和 `Baskerville SDF.asset`，保留 `.meta`，等待当前 Unity 实例自动按新参数重建
+- 当前验证：
+  - 代码级静态检查已通过
+  - 命令行直连重建失败原因已确认：项目正被另一 Unity 实例占用
+  - 尚未看到当前打开的 Unity 完成超高精度字体资产重建后的结果
+- 下一步：
+  1. 回到当前 Unity，等待资源刷新与脚本重编译完成
+  2. 检查 `Assets/Resources/Fonts/TMP/` 下是否重新生成 `Songti SDF.asset` 和 `Baskerville SDF.asset`
+  3. 打开人物面板与对话 UI，确认文字已经切到超高精度版本并显著变清晰
+- 时间：2026-04-12 20:12 CST
+- 动作：为文档补状态标签，并新增 Notion 精简目录稿
+- 修改文件：
+  - Docs/README.md
+  - Docs/01_Project/NOTION_DOCS_INDEX_CN.md
+  - Docs/01_Project/DARKVILLAGE_NOTION_IMPORT_CN.md
+  - Docs/02_Gameplay/CORE_GAMEPLAY_MASTER_SPEC_CN.md
+  - Docs/02_Gameplay/INTERIOR_CUTAWAY_SPEC.md
+  - Docs/02_Gameplay/MONSTER_DESIGN_SPEC.md
+  - Docs/03_UI/UI_ARCHITECTURE_SPEC.md
+  - Docs/03_UI/GEMINI_UI_ASSET_BRIEF.md
+  - PROJECT_PROGRESS.txt
+- 实现内容：
+  1. 给主要文档统一补上“文档状态 / 建议用途 / 不承担职责”，降低总览稿、长期规范和外部简报之间的混用概率
+  2. 在 `Docs/README.md` 中增加文档状态说明和逐份定位说明
+  3. 新增 `Docs/01_Project/NOTION_DOCS_INDEX_CN.md`，提供适合直接贴进 Notion 的页面树、摘要和使用规则
+- 当前验证：
+  - 已检查新增头部是否写入各文档
+  - 已检查 Notion 精简目录稿可单独阅读
+  - 尚未在真实 Notion 页面中验证最终展示层级
+- 下一步：
+  1. 如果需要，可以继续把长文档压缩成“1 页首页 + 5 页子页”的最终投喂版
+  2. 如果后续发现某份文档已过时，可继续补 `已归档 / 待更新` 标签
+- 时间：2026-04-12 20:08 CST
+- 动作：整理 Docs 目录结构，补统一入口索引
+- 修改文件：
+  - Docs/README.md
+  - Docs/01_Project/DARKVILLAGE_NOTION_IMPORT_CN.md
+  - Docs/02_Gameplay/CORE_GAMEPLAY_MASTER_SPEC_CN.md
+  - Docs/01_Project/
+  - Docs/02_Gameplay/
+  - Docs/03_UI/
+  - PROJECT_PROGRESS.txt
+- 实现内容：
+  1. 把原先平铺在 `Docs/` 根目录的文档按用途拆到 `01_Project / 02_Gameplay / 03_UI`
+  2. 新增 `Docs/README.md` 作为统一入口，明确“先读哪个、各目录放什么”
+  3. 修正文档内部对设计稿路径的引用，避免整理后留下旧路径和死引用
+- 当前验证：
+  - 已检查整理后的 `Docs` 树结构
+  - 已检查主要 Markdown 内部引用是否仍指向旧路径
+  - 尚未在 Notion 或外部文档工具中实际导入验证展示效果
+- 下一步：
+  1. 如果后续继续新增文档，优先放入对应子目录，不再直接堆到 `Docs/` 根目录
+  2. 需要时可继续补一版更偏 Notion 页面树的精简文档
+- 时间：2026-04-12 19:40 Asia/Shanghai
+- 动作：修正人物面板文本错位，并定位/修复字体发糊链路
+- 修改文件：
+  - Assets/Scripts/UI/InventoryCanvasView.cs
+  - Assets/Scripts/UI/Core/UiFactory.cs
+  - Assets/Editor/TmpFontAssetBuilder.cs
+  - PROJECT_PROGRESS.txt
+- 实现内容：
+  1. 重排人物面板布局，把人物页拆成头像卡、状态卡、目标卡、记录卡，并收紧背包页的字号、边距和详情区排版，降低文本挤压和错位概率
+  2. 定位到当前 `Songti SDF` 预生成字体资产采样精度偏低：现有资产是 `96pt / 2048 atlas` 的动态 TMP 字体，对中文大字号 UI 容易发糊
+  3. `UiFactory` 现在会拒绝低质量的预生成 TMP 字体资产，改为优先使用 `192pt / 4096 atlas` 的高精度字体；同时关闭运行时给文字追加的 `FaceDilate + Outline`，避免边缘发虚
+  4. `TmpFontAssetBuilder` 升级为自动重建低质量字体资产，Unity 重新编译后会把现有低精度 `Songti/Baskerville SDF` 升级到高精度版本
+- 当前验证：
+  - 已完成代码级静态检查
+  - `git diff --check` 已通过
+  - 尚未进入 Unity 实机确认字体清晰度、面板排版和自动重建字体资产是否生效
+- 下一步：
+  1. 回 Unity 等脚本重新编译，观察 Console 是否出现 `TmpFontAssetBuilder` 重建日志
+  2. 打开人物面板，检查标题、页签、目标文本、背包详情文本是否变清晰且不再错位
+  3. 如果仍有个别文字发糊，再对比运行中的 `Songti SDF` 实际 atlas 尺寸与材质参数，继续收窄问题
+- 时间：2026-04-12 19:30 Asia/Shanghai
+- 动作：把背包升级为完整人物面板，并在面板内切换背包页
+- 修改文件：
+  - Assets/Scripts/InventoryController.cs
+  - Assets/Scripts/UI/InventoryCanvasView.cs
+  - PROJECT_PROGRESS.txt
+- 实现内容：
+  1. 将原来的单独背包入口升级为统一的人物面板，打开后默认进入“人物”页
+  2. 新增 `人物 / 背包` 双页签，可用 `A/D`、左右方向键或 `1/2` 在页签之间切换
+  3. 人物页现在展示角色身份、生命、近战数据、当前目标和探索记录；背包页保留物品列表与详情查看
+- 当前验证：
+  - 已完成代码级静态检查
+  - `git diff --check` 已通过
+  - 尚未进入 Unity 实机确认页签排版、文本换行和按键手感
+- 下一步：
+  1. 进 Unity 重新编译后先按 `Tab / I` 打开人物面板，确认默认进入人物页
+  2. 用 `A/D` 或 `1/2` 切到背包页，确认列表与详情仍能正常显示
+  3. 检查人物页里的当前目标和探索记录是否符合当前流程节奏，再决定是否补头像、装备栏和属性项
+- 时间：2026-04-12 19:23 Asia/Shanghai
+- 动作：完成第一版可用背包系统
+- 新增文件：
+  - Assets/Scripts/InventoryItemCatalog.cs
+  - Assets/Scripts/InventoryItemCatalog.cs.meta
+  - Assets/Scripts/InventoryController.cs
+  - Assets/Scripts/InventoryController.cs.meta
+  - Assets/Scripts/UI/InventoryCanvasView.cs
+  - Assets/Scripts/UI/InventoryCanvasView.cs.meta
+- 修改文件：
+  - Assets/Scripts/ChapterStateManager.cs
+  - Assets/Scripts/PickupInteractable.cs
+  - Assets/Scripts/PlayerMover.cs
+  - Assets/Scripts/PlayerCombat.cs
+  - Assets/Scripts/SimpleEnemyController.cs
+  - Assets/Scripts/InteractionPromptUI.cs
+  - Assets/Scripts/UI/Core/UiStateCoordinator.cs
+  - Assets/Scripts/UI/Core/UiBackdropView.cs
+  - Assets/Scripts/UI/HUD/HudCanvasView.cs
+  - Assets/Scripts/UI/Core/UiBootstrap.cs
+  - Assets/Scripts/GameBootstrap.cs
+  - PROJECT_PROGRESS.txt
+- 实现内容：
+  1. 新增 `InventoryController + InventoryCanvasView + InventoryItemCatalog`，支持 `Tab / I` 打开背包、查看已收集物品列表、切换选中项并阅读详情
+  2. 把现有 `PickupInteractable -> ChapterState -> SaveSystem` 链路正式接到背包系统，收集物现在会保留顺序，并可登记显示名、分类和说明
+  3. 背包打开时会暂停时间、锁住移动/攻击/敌人更新/交互提示，并通过 `UiStateCoordinator` 接入现有 UI 模式与背景遮罩
+- 当前验证：
+  - 已完成代码级静态检查
+  - `git diff --check` 已通过
+  - 尚未进入 Unity 实机验证背包开关、选中切换、空背包态和拾取同步
+- 下一步：
+  1. 进 Unity 重新编译后，用 `Tab` 或 `I` 打开背包，确认空背包也能正常显示
+  2. 拾取一个现有物件，确认它会立即进入背包列表，并能显示名字与说明
+  3. 在背包打开时检查玩家、敌人、交互提示是否都被正确暂停/隐藏
+- 时间：2026-04-12 18:37 Asia/Shanghai
+- 动作：确认对话文本已写入，改为修复正文显示层
+- 修改文件：
+  - Assets/Scripts/UI/Dialogue/DialogueCanvasView.cs
+  - Assets/Scripts/SimpleDialogueUI.cs
+  - PROJECT_PROGRESS.txt
+- 实现内容：
+  1. 根据 `DialogueDiagnostics` 日志确认文本已成功写入 UI，且 TMP 已生成字符，不是“没写文本”
+  2. 将对话正文从 `ScrollRect + Mask + Viewport` 链路改成直接挂在 `dialogueContent` 下显示，排除遮罩/滚动层把正文裁掉的问题
+  3. 保留诊断日志，便于继续核对这一版是否把正文真正显示出来
+- 当前验证：
+  - 已确认日志层面 `lineCount/bodyLength/renderedCharacters` 均正常
+  - 尚未收到这一版布局修复后的实机日志与肉眼结果
+- 下一步：
+  1. 回 Unity 重新编译后再次触发誓牌查看和开场旁白
+  2. 若正文恢复显示，再移除诊断日志并继续修房间 2
+- 时间：2026-04-12 18:31 Asia/Shanghai
+- 动作：为对话空白问题补运行时诊断日志
+- 修改文件：
+  - Assets/Scripts/SimpleDialogueUI.cs
+  - Assets/Scripts/UI/Dialogue/DialogueCanvasView.cs
+  - PROJECT_PROGRESS.txt
+- 实现内容：
+  1. 在 `SimpleDialogueUI.Show` 和 `SyncCanvasView` 中增加日志，记录实际收到的 speaker、lineCount 和 currentLine
+  2. 在 `DialogueCanvasView.ShowDialogue` 中增加日志，记录 bodyLength、renderedCharacters、font 和 alpha
+  3. 目标是直接区分“文本没写入 UI 链路”和“文本写入了但没有被渲染”
+- 当前验证：
+  - 代码已落地，待在 Unity 中再次触发空白对话收集日志
+  - 暂未读取到新的运行时日志样本
+- 下一步：
+  1. 在 Unity 中再次触发开场旁白或誓牌查看
+  2. 根据 Console 中的 `DialogueDiagnostics` 日志判断是写入问题还是渲染问题
+- 时间：2026-04-12 18:23 Asia/Shanghai
+- 动作：补正式 TMP 字体资产生成链路
+- 新增文件：
+  - Assets/Editor/TmpFontAssetBuilder.cs
+  - Assets/Editor/TmpFontAssetBuilder.cs.meta
+- 修改文件：
+  - Assets/Scripts/UI/Core/UiFactory.cs
+  - PROJECT_PROGRESS.txt
+- 实现内容：
+  1. 新增编辑器脚本，可把 `Songti.ttc` 和 `Baskerville.ttc` 生成正式 TMP 字体资产
+  2. `UiFactory` 现在会优先从 `Resources/Fonts/TMP` 读取预生成的 TMP 字体，而不是直接走运行时临时创建
+  3. 目标是让对话、HUD、弹窗统一走固定字体资产，摆脱“运行时建字形偶发空白/方框”问题
+- 当前验证：
+  - 代码已落地，待用 Unity 命令行实际生成字体资产
+  - 生成成功后还需重新编译确认对话框文字恢复
+- 下一步：
+  1. 运行 Unity batchmode 执行 `TmpFontAssetBuilder.BuildRuntimeFonts`
+  2. 生成成功后检查对话、任务和交互提示文本
+- 时间：2026-04-12 18:16 Asia/Shanghai
+- 动作：把默认 UI 主题字体锁回项目内 `Songti.ttc`
+- 修改文件：
+  - Assets/Scripts/UI/Core/UiTheme.cs
+  - Assets/Resources/UI/DefaultUiTheme.asset
+  - PROJECT_PROGRESS.txt
+- 实现内容：
+  1. 默认主题的 `bodyFont` 和 `displayFont` 都直接绑定到项目内导入的 `Songti.ttc`
+  2. 字体加载顺序改回 `Resources` 字体优先，避免再次优先命中不稳定的系统动态字体链路
+  3. 目标是先恢复全局中文可读性，再单独处理标题风格和英文字体细节
+- 当前验证：
+  - 已完成资源引用级修正
+  - 尚未进入 Unity 重新编译确认文本是否从方框恢复正常
+- 下一步：
+  1. 进 Unity 重新编译后先检查对话、任务、交互提示是否恢复正常中文
+  2. 如果 `Songti.ttc` 仍不能稳定出字，就补编辑器脚本自动生成并绑定正式 TMP 字体资产
+- 时间：2026-04-12 18:09 Asia/Shanghai
+- 动作：修正对话文本显示为空的字体回退链路
+- 修改文件：
+  - Assets/Scripts/UI/Core/UiTheme.cs
+  - Assets/Scripts/UI/Core/UiFactory.cs
+  - PROJECT_PROGRESS.txt
+- 实现内容：
+  1. `UiTheme` 的正文和标题字体改为优先走系统中文字体，再回退到项目内 `Songti/Baskerville` 资源
+  2. `DisplayFont` 不再直接盲跟 `BodyFont`，而是走独立的显示字体回退链路
+  3. `UiFactory` 在 TMP 动态字体创建失败时，会继续回退到系统默认中文字体对应的 TMP 资产，而不是直接停在空白显示
+- 当前验证：
+  - 已完成代码级静态检查
+  - 尚未进入 Unity 重新编译验证对话框文字是否恢复显示
+- 下一步：
+  1. 进 Unity 重新编译后优先验证开场旁白、誓牌查看文本、灰烬客厅现有对白是否正常显示
+  2. 如果仍出现空白，再直接在对话 UI 上加运行时诊断日志，确认是 `Show(...)` 内容为空还是 TMP 字体材质未出字
+- 时间：2026-04-12 18:00 Asia/Shanghai
+- 动作：完成 `灰烬客厅` 第一个房间的落地房内容
+- 新增文件：
+  - Assets/Scripts/InspectionInteractable.cs
+  - Assets/Scripts/InspectionInteractable.cs.meta
+- 修改文件：
+  - Assets/Scripts/TowerInteriorSlice.cs
+  - Assets/Scripts/AshParlorRunController.cs
+  - PROJECT_PROGRESS.txt
+- 实现内容：
+  1. 给房间 1 新增可查看的 `焦痕誓牌`，让落地房第一次承担主题展示和主动观察
+  2. 把开场对白从开局立刻弹出改成玩家走进房间时触发，让出生后先看到空间再接文本
+  3. 在房间 1 右侧补了引导性余烬灯势，帮助玩家自然朝第一盏封印烛台前进
+  4. `TowerInteriorSlice` 布局版本递增，保证运行时会重建新的五房结构
+- 当前验证：
+  - 已完成代码级静态检查
+  - 尚未进入 Unity 实机验证触发范围、交互距离和引导感
+- 下一步：
+  1. 进 Unity 实测房间 1 的旁白触发点、誓牌交互距离和右侧引导是否自然
+  2. 如果落地房节奏成立，再继续打磨房间 2 的规则房反馈
+- 时间：2026-04-12 17:59 Asia/Shanghai
+- 动作：重写总玩法设计稿并清理重复旧稿
+- 新增文件：
+  - Docs/CORE_GAMEPLAY_MASTER_SPEC_CN.md
+- 删除文件：
+  - Docs/FLOOR_PLAYSTYLE_REFERENCE_CN.md
+  - Docs/FLOOR_PLAYSTYLE_REFERENCE_CN.md.meta
+  - Docs/INFINITE_TOWER_FLOW_SPEC.md
+  - Docs/VERTICAL_SLICE_NEXT_STEPS_CN.md
+  - Docs/VERTICAL_SLICE_NEXT_STEPS_CN.md.meta
+- 实现内容：
+  1. 新写一份唯一生效的核心玩法总设计稿，统一项目定位、核心循环、楼层结构、奖励结构与首发楼层池
+  2. 把 `灰烬客厅` 正式收成第一层样板的完整玩法定义，明确目标、房间节拍、选择后果和通过标准
+  3. 删除 3 份已经被新总稿吸收的旧玩法文档，避免后续继续在多个版本之间来回对照
+- 当前验证：
+  - 已完成文档级整理与静态检查
+  - 尚未进入 Unity 做基于新稿的实机调优
+- 下一步：
+  1. 按新总稿优先打磨 `灰烬客厅` 的敌人预兆、灯势差异和选择后果体感
+  2. 在 `灰烬客厅` 稳定成立后，再推进 `潮湿厨房` 或 `镜像病房` 的第二层原型
+- 时间：2026-04-12 01:24 Asia/Shanghai
+- 动作：收口灰烬客厅的 HUD 与剧情表现
+- 修改文件：
+  - Assets/Scripts/QuestTrackerUI.cs
+  - Assets/Scripts/CombatHud.cs
+  - Assets/Scripts/SimpleEnemyController.cs
+  - Assets/Scripts/AshParlorRunController.cs
+- 实现内容：
+  1. 去掉世界空间目的地指向标，只保留任务面板
+  2. 玩家状态 HUD 改为常驻显示生命与操作提示，不再只在遭遇战 UI 中出现
+  3. 灰烬客厅取消“每进一个房间就弹对话框”，改成开场、关键交互、结尾才弹
+  4. 为灰烬客厅补上简单剧情文本，统一改成有实际内容的对白
+- 当前验证：
+  - 已完成代码级静态检查
+  - 尚未完成 Unity 实机验证
+- 下一步：
+  1. 进 Unity 实测 HUD 是否常驻、世界指引是否彻底消失
+  2. 进灰烬客厅确认剧情弹窗频率是否合适、文本是否能正常显示
+- 时间：2026-04-12 01:06 Asia/Shanghai
+- 动作：把 `灰烬客厅` 从最小可玩版升级成完整模板
+- 新增文件：
+  - Assets/Scripts/AshParlorChoiceInteractable.cs
+  - Assets/Scripts/AshParlorSealBarrier.cs
+- 修改文件：
+  - Assets/Scripts/AshParlorRunController.cs
+  - Assets/Scripts/TowerInteriorSlice.cs
+  - Assets/Scripts/SimpleEnemyController.cs
+  - Assets/Scripts/AshParlorChoiceInteractable.cs
+- 实现内容：
+  1. `TowerInteriorSlice` 从 2 房扩成 5 房，按 `落地 / 规则 / 压力 / 选择 / 终局` 生成
+  2. 新增两道封印门：第一盏烛台前锁住压力房，选择前锁住终局房
+  3. 新增选择房双选项：`夺取余烬`（立即回血但终局怪更凶） / `压住封灰`（无回血但终局怪更弱）
+  4. 新增两只职责不同的怪：压力房追击怪、终局房强化怪，按节拍启用
+  5. 新增房间进入旁白、目标流转、终局结算与出口奖励
+- 当前验证：
+  - 已完成代码级静态检查
+  - 还未完成 Unity 实机验证
+- 下一步：
+  1. 进 Unity 实测五房节拍是否顺畅、封印门是否确实挡住玩家
+  2. 按实机结果继续调怪物压迫感、烛台位置、选择收益与终局强度
+- 时间：2026-04-12 00:18 Asia/Shanghai
+- 动作：实现 `灰烬客厅` 最小可玩版
+- 新增文件：
+  - Assets/Scripts/AshParlorRunController.cs
+  - Assets/Scripts/AshParlorBrazierInteractable.cs
+  - Assets/Scripts/AshParlorExitInteractable.cs
+- 修改文件：
+  - Assets/Scripts/TowerInteriorSlice.cs
+  - Assets/Scripts/SimpleEnemyController.cs
+- 实现内容：
+  1. 给当前两房切片接入 `灰烬客厅` 运行状态：两盏封印烛台、封印塔梯、阶段化任务目标
+  2. 第一盏烛台点亮前怪物更凶，点亮后压力下降，第二盏点亮后塔梯解锁
+  3. 出口交互后会回复 1 点生命，并以重载当前场景临时代替“进入下一层”
+- 当前验证：
+  - 已完成代码级静态检查
+  - 未完成 Unity 实机验证
+- 下一步：
+  1. 进 Unity 实测烛台位置、交互范围、怪物压迫感、出口流程
+  2. 如果交互和节奏成立，再把第二房继续强化成真正的终局压力房
+- 时间：2026-04-11 23:25 Asia/Shanghai
+- 动作：整理外部玩法参考，收成项目内楼层玩法设计稿
+- 新增文件：
+  - Docs/FLOOR_PLAYSTYLE_REFERENCE_CN.md
+  - Docs/FLOOR_PLAYSTYLE_REFERENCE_CN.md.meta
+- 内容摘要：
+  1. 把外部参考收成 7 条适合 `DarkVillageDemo` 的玩法原则
+  2. 按 `灰烬客厅 / 潮湿厨房 / 镜像病房 / 钟摆书库 / 温室骨房 / 倒置儿童房` 六层拆成可开发的小设计
+  3. 明确推荐的玩法组合为：点灯压制、单房追逐、硬选择、攻击预兆、层后奖励
+- 当前验证：已完成文档级整理与静态检查
+- 下一步：优先把 `灰烬客厅` 做成真正的“光暗改变局势”版本，再推进 `潮湿厨房` 作为第二层原型
 - 时间：2026-03-28 18:47 Asia/Shanghai
 - 动作：代码审查 + Bug 修复
 - 修复内容：
@@ -146,3 +525,74 @@
 - 当前项目目录里没有额外企划 txt；企划在上面的 research 目录
 - 当前优先级不是大扩张，而是把 M1 闭环做实
 - 长任务 watchdog 已启用，会按接力文件继续推进
+
+## 最新记录
+- 时间：2026-04-12 Asia/Shanghai
+- 动作：按“固定 TMP 资产”方案重构 UI 字体链路。`UiTheme` 已从 `Font` 切到固定 `TMP_FontAsset`，正文和标题默认只会加载 `Resources/Fonts/TMP/Hiragino Sans GB UI Body SDF` 与 `...Display SDF`；`UiFactory` 也已移除 UI 主链路中的运行时系统字体探测，不再用 `Font.CreateDynamicFontFromOSFont(...)` 兜底。新增 `Assets/Resources/Fonts/HiraginoSansGB.ttc` 的导入 meta，并把 `TmpFontAssetBuilder` 改成只生成两套 Hiragino Sans GB UI 资产，构建参数固定为 `256pt / padding 16 / 8192 atlas / Dynamic + Multi Atlas`，同时预烘焙项目内主要文本字符。
+- 修改文件：
+  - Assets/Scripts/UI/Core/UiTheme.cs
+  - Assets/Scripts/UI/Core/UiFactory.cs
+  - Assets/Editor/TmpFontAssetBuilder.cs
+  - Assets/Resources/UI/DefaultUiTheme.asset
+  - Assets/Resources/Fonts/HiraginoSansGB.ttc.meta
+  - PROJECT_PROGRESS.txt
+- 当前验证：代码级链路已收口，并从 `Editor.log` 反查到当前运行中的旧版本仍在使用 `LiberationSans SDF`，这也解释了为什么之前还会继续出现中文方框。新的 Hiragino 字体资源需要等 Unity 对新 `.meta` 和编辑器脚本完成一次导入/重编译后，才会实际生成 `Hiragino Sans GB UI Body/Display SDF` 并替换旧字体。
+- 接手者下一步：回到 Unity 让它完成这轮导入与脚本编译，确认 `Assets/Resources/Fonts/TMP/` 下出现新的 Hiragino 两套字体资产；然后优先检查对话框、人物面板、任务/HUD 文本的运行时日志，确认实际字体名已不再是 `LiberationSans SDF`、`Songti SDF` 或 `Baskerville SDF`。
+
+- 时间：2026-04-12 Asia/Shanghai
+- 动作：修复运行时 UI 中文显示异常与可读性问题。已确认默认主题 `DisplayFont` 会优先落到 `Assets/Resources/Fonts/Baskerville.ttc`，而 HUD / 对话 / 弹窗中的多处中文标题直接使用 `DisplayFont`，这会导致中文字形缺失并显示为方框。现已将默认 `DisplayFont` 改为跟 `BodyFont` 走同一套中文可用字体链路，正文优先使用项目内 `Assets/Resources/Fonts/Songti.ttc`，同时保留前面已做的 TMP 图集放大、关闭 pixelPerfect、收紧小字号描边与增大关键 HUD/对话小字字号的修复。
+- 修改文件：
+  - Assets/Scripts/UI/Core/UiTheme.cs
+  - Assets/Scripts/UI/Core/UiFactory.cs
+  - Assets/Scripts/UI/HUD/HudCanvasView.cs
+  - Assets/Scripts/UI/Dialogue/DialogueCanvasView.cs
+  - PROJECT_PROGRESS.txt
+- 当前验证：已完成代码级链路核对。`Assets/Resources/UI/DefaultUiTheme.asset` 中 `bodyFont/displayFont` 为空，因此运行时会实际走新的默认字体逻辑。尚未在 Unity 编辑器内做肉眼验证。
+- 接手者下一步：进 Unity 重新编译后，优先检查任务标题、交互标题、弹窗标题、对话说话人名是否恢复为正常中文；若仍有个别方框，继续排查该具体文本是否被强制绑定到独立 TMP 资产或外部字体材质。
+
+- 时间：2026-04-12 Asia/Shanghai
+- 动作：按需求删除左上战斗状态模板，不再用运行时强制隐藏补丁。已删除 `CombatHud` 脚本与其 meta，`GameBootstrap` 不再自动创建该组件；`HudCanvasView` 也不再构建 `CombatPanel`。同时新增独立的 `PlayerStatusHud` 与简化版 `StatusPanel`，只负责显示角色名与生命值，避免把角色状态和战斗威胁/操作提示混在同一块模板里。
+- 修改文件：
+  - Assets/Scripts/GameBootstrap.cs
+  - Assets/Scripts/PlayerStatusHud.cs
+  - Assets/Scripts/UI/HUD/HudCanvasView.cs
+  - Assets/Scripts/CombatHud.cs
+  - Assets/Scripts/CombatHud.cs.meta
+  - PROJECT_PROGRESS.txt
+- 当前验证：代码级自检已确认项目内不再有 `CombatHud` 自动创建与引用，`PlayerStatusHud` 会在运行时主动更新 `HudCanvasView.SetStatusPanel(...)`。尚未在 Unity 编辑器内实机确认新状态面板位置与显示效果。
+- 接手者下一步：进 Unity 重编译后，优先确认左上只剩角色状态面板且不再出现战斗模板；如果状态面板位置还碍事，继续只调 `StatusPanel` 尺寸与锚点，不要再恢复旧模板。
+
+- 时间：2026-04-12 Asia/Shanghai
+- 动作：把主场景从“室外光照进来”改成封闭式室内照明。已在运行时与场景资源两侧同时处理：`GameBootstrap` 现在会清空 `RenderSettings.sun`、关闭所有方向光并压低环境光；`Main.unity` 中原有 `Directional Light` 已停用，环境光和天空盒也改为室内基调。`SpriteCharacterLighting` 去掉了“无方向光时仍套用默认室外主光”的兜底逻辑。`TowerInteriorSlice` 则移除了窗光 spot light，把房间背墙的窗口改成封闭墙板/暗色内嵌面，并新增居中的吊灯点光源，让各房间主要靠室内灯具、烛台和选择物件发光。
+- 修改文件：
+  - Assets/Scripts/GameBootstrap.cs
+  - Assets/Scripts/SpriteCharacterLighting.cs
+  - Assets/Scripts/TowerInteriorSlice.cs
+  - Assets/Scenes/Main.unity
+  - PROJECT_PROGRESS.txt
+- 当前验证：代码级自检已确认 `WindowFill` / `RearWindowFill` 调用已移除，方向光会在场景资源与运行时双重停用，角色在无方向光时不再获得默认室外主光。尚未在 Unity 编辑器内做肉眼验证。
+- 接手者下一步：进 Unity 重新编译后，优先检查 1）房间背墙是否已经不再像窗外透光；2）角色受光是否主要来自房间吊灯和烛台；3）封闭后整体是否过暗，再按房间逐个微调吊灯强度和范围。
+
+- 时间：2026-04-13 16:30 CST
+- 动作：完成 Task 3，新增“灰烬客厅”层结算画面，并把出口逻辑从“对话后直接重载”改成“暂停游戏 -> 显示结算面板 -> 点击继续后重新开始”。结算面板改为运行时代码创建，走 `UiBootstrap` 的统一 UI 创建链路，包含 0.3 秒淡入、半透明黑色遮罩、收集物数量、选择结果、叙事总结和继续按钮。为避免结算阶段还能移动/攻击/开背包，也同步把相关输入阻断条件接上了 `FloorSummaryPanel.IsVisible`。
+- 修改文件：
+  - Assets/Scripts/AshParlorRunController.cs
+  - Assets/Scripts/InventoryController.cs
+  - Assets/Scripts/InteractionPromptUI.cs
+  - Assets/Scripts/PickupInteractable.cs
+  - Assets/Scripts/PlayerCombat.cs
+  - Assets/Scripts/PlayerMover.cs
+  - Assets/Scripts/UI/Core/UiBootstrap.cs
+  - Assets/Scripts/UI/Core/UiStateCoordinator.cs
+  - Assets/Scripts/UI/FloorSummaryPanel.cs
+  - Assets/Scripts/UI/FloorSummaryPanel.cs.meta
+  - PROJECT_PROGRESS.txt
+- 当前验证：
+  - `git diff --check` 已通过
+  - 已完成代码级链路核对：出口会调用结算面板，结算面板使用 `Time.unscaledDeltaTime` 淡入，继续按钮会恢复 `Time.timeScale = 1`、重置章节运行态并重新载入 `Main`
+  - 当前环境没有 Unity 生成的 `.sln/.csproj`，因此还没法在命令行做一次完整 C# 编译验证，也还没在编辑器里实机点通
+- 接手者下一步：
+  1. 回 Unity 触发脚本重编译，确认 `FloorSummaryPanel.cs` 和 `.meta` 已正常导入
+  2. 从灰烬客厅正常通关一次，确认出口后出现淡入结算面板，且背景遮罩/文案/按钮都显示正常
+  3. 分别验证 Risk / Safe 两条路的选择结果文本与叙事总结
+  4. 验证收集物数量是否符合当前设计预期；如果后续该层新增更多拾取物，可继续沿用 `InventoryController.GetCurrentFloorCollectionSummary()` 这条统计路径

@@ -30,6 +30,9 @@ public class InteractionPromptUI : MonoBehaviour
         }
 
         bool shouldShow = !SimpleDialogueUI.IsOpen
+            && !InventoryController.IsOpen
+            && !AshParlorChoiceOverlay.IsVisible
+            && !FloorSummaryPanel.IsVisible
             && _player != null
             && _player.HasInteractableTarget
             && _player.CurrentInteractable != null;

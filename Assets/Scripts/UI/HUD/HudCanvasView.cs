@@ -1,45 +1,50 @@
-using DarkVillage.UI.Effects;
+using System.Globalization;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
 public sealed class HudCanvasView : MonoBehaviour
 {
-    private const float InteractionPromptWidth = 780f;
-    private const float InteractionPromptHeight = 180f;
-    private const float WorldMarkerWidth = 220f;
-    private const float WorldMarkerHeight = 80f;
-
     private UiTheme _theme;
     private UiStateCoordinator _stateCoordinator;
+    private bool _combatDanger;
 
-    [Header("Quest Panel (Top-Right anchored)")]
+    [Header("Quest Dock")]
     [SerializeField] private RectTransform _questPanel;
     [SerializeField] private TMP_Text _questTitleText;
     [SerializeField] private TMP_Text _questBodyText;
     private CanvasGroup _questGroup;
 
-    [Header("Quest Completion Banner")]
+    [Header("Completion Toast")]
     [SerializeField] private RectTransform _completionBanner;
     [SerializeField] private TMP_Text _completionBannerText;
     private CanvasGroup _completionBannerGroup;
 
-    [Header("Interaction Prompt (Bottom hovering)")]
+    [Header("Interaction Prompt")]
     [SerializeField] private RectTransform _interactionPrompt;
     [SerializeField] private TMP_Text _interactionKeyText;
     [SerializeField] private TMP_Text _interactionTitleText;
     [SerializeField] private TMP_Text _interactionHintText;
     private CanvasGroup _interactionGroup;
 
-    [Header("Combat Panel (Top-Left anchored)")]
+    [Header("Status Dock")]
+    [SerializeField] private RectTransform _statusPanel;
+    [SerializeField] private TMP_Text _statusTitleText;
+    [SerializeField] private TMP_Text _statusBodyText;
+    [SerializeField] private TMP_Text _statusMetaText;
+    [SerializeField] private Image _statusHealthFill;
+    private CanvasGroup _statusGroup;
+
+    [Header("Combat Dock")]
     [SerializeField] private RectTransform _combatPanel;
-    [SerializeField] private Image _combatEmberGlow;
-    [SerializeField] private TMP_Text _playerLineText;
-    [SerializeField] private TMP_Text _combatHintText;
-    [SerializeField] private TMP_Text _encounterLineText;
-    [SerializeField] private TMP_Text _enemyLineText;
+    [SerializeField] private TMP_Text _combatEncounterText;
+    [SerializeField] private TMP_Text _combatControlsText;
+    [SerializeField] private TMP_Text _combatPlayerText;
+    [SerializeField] private TMP_Text _combatEnemyText;
+    [SerializeField] private Image _combatPlayerFill;
+    [SerializeField] private Image _combatEnemyFill;
+    [SerializeField] private Image _combatDangerGlow;
     private CanvasGroup _combatGroup;
-    private EmberBreathingEffect _combatEmberEffect;
 
     [Header("World Marker")]
     [SerializeField] private RectTransform _worldMarkerRoot;
@@ -65,15 +70,11 @@ public sealed class HudCanvasView : MonoBehaviour
             UiFactory.Stretch(root);
         }
 
-        BuildQuestPanel();
-        BuildCompletionBanner();
-        BuildInteractionPrompt();
-        BuildCombatPanel();
-        BuildWorldMarker();
-
+        BuildLayout();
         HideQuestPanel();
         HideCompletionBanner();
         HideInteractionPrompt();
+        HideStatusPanel();
         HideCombatPanel();
         HideWorldMarker();
 
@@ -106,11 +107,10 @@ public sealed class HudCanvasView : MonoBehaviour
         }
 
         _questTitleText.text = string.IsNullOrWhiteSpace(title) ? "当前目标" : title.Trim();
-        _questBodyText.text = string.IsNullOrWhiteSpace(body) ? string.Empty : body.Trim();
+        _questBodyText.text = string.IsNullOrWhiteSpace(body) ? "继续探索村庄深处。" : body.Trim();
 
-        float bodyHeight = Mathf.Max(24f, _questBodyText.preferredHeight);
-        float panelHeight = Mathf.Clamp(bodyHeight + 40f, 64f, 118f);
-        _questPanel.sizeDelta = new Vector2(_questPanel.sizeDelta.x, panelHeight);
+        float bodyHeight = Mathf.Clamp(_questBodyText.preferredHeight, 30f, 88f);
+        _questPanel.sizeDelta = new Vector2(_questPanel.sizeDelta.x, bodyHeight + 74f);
     }
 
     public void HideQuestPanel()
@@ -140,11 +140,9 @@ public sealed class HudCanvasView : MonoBehaviour
             return;
         }
 
-        _completionBannerText.text = string.IsNullOrWhiteSpace(body) ? "当前目标已完成" : body.Trim();
-
-        float bodyHeight = Mathf.Max(24f, _completionBannerText.preferredHeight);
-        float panelHeight = Mathf.Clamp(bodyHeight + 28f, 52f, 96f);
-        _completionBanner.sizeDelta = new Vector2(_completionBanner.sizeDelta.x, panelHeight);
+        _completionBannerText.text = string.IsNullOrWhiteSpace(body) ? "任务已推进" : body.Trim();
+        float bodyHeight = Mathf.Clamp(_completionBannerText.preferredHeight, 18f, 44f);
+        _completionBanner.sizeDelta = new Vector2(_completionBanner.sizeDelta.x, bodyHeight + 24f);
     }
 
     public void HideCompletionBanner()
@@ -169,9 +167,8 @@ public sealed class HudCanvasView : MonoBehaviour
         }
 
         _interactionKeyText.text = string.IsNullOrWhiteSpace(keyText) ? "E" : keyText.Trim();
-        _interactionTitleText.text = string.IsNullOrWhiteSpace(displayName) ? "悬停物件" : displayName.Trim();
-        string prompt = string.IsNullOrWhiteSpace(promptText) ? "进行交互" : promptText.Trim();
-        _interactionHintText.text = prompt;
+        _interactionTitleText.text = string.IsNullOrWhiteSpace(displayName) ? "可交互对象" : displayName.Trim();
+        _interactionHintText.text = string.IsNullOrWhiteSpace(promptText) ? "进行交互" : promptText.Trim();
     }
 
     public void HideInteractionPrompt()
@@ -185,15 +182,48 @@ public sealed class HudCanvasView : MonoBehaviour
     public void ShowInteraction(string prompt, string key)
     {
         SetInteractionPrompt(true, "可交互对象", prompt, key);
-        if (_interactionHintText != null)
-        {
-            _interactionHintText.color = _theme.MossGreen;
-        }
     }
 
     public void HideInteraction()
     {
         HideInteractionPrompt();
+    }
+
+    public void SetStatusPanel(bool visible, string title, string body)
+    {
+        if (_statusPanel == null)
+        {
+            return;
+        }
+
+        _statusPanel.gameObject.SetActive(visible);
+        if (!visible)
+        {
+            return;
+        }
+
+        _statusTitleText.text = string.IsNullOrWhiteSpace(title) ? "旅者状态" : title.Trim();
+
+        if (TryExtractFraction(body, out float normalized, out string compactValue))
+        {
+            _statusBodyText.text = "生命";
+            _statusMetaText.text = compactValue;
+            _statusHealthFill.fillAmount = normalized;
+        }
+        else
+        {
+            _statusBodyText.text = string.IsNullOrWhiteSpace(body) ? "生命状态未知" : body.Trim();
+            _statusMetaText.text = "监测中";
+            _statusHealthFill.fillAmount = 0.55f;
+        }
+    }
+
+    public void HideStatusPanel()
+    {
+        if (_statusPanel != null)
+        {
+            _statusPanel.gameObject.SetActive(false);
+        }
     }
 
     public void SetCombatPanel(bool visible, string playerLine, string controlsLine, string encounterLine, string enemyLine, bool showEncounterDetails)
@@ -209,22 +239,16 @@ public sealed class HudCanvasView : MonoBehaviour
             return;
         }
 
-        _playerLineText.text = string.IsNullOrWhiteSpace(playerLine) ? string.Empty : playerLine.Trim();
-        _combatHintText.text = string.IsNullOrWhiteSpace(controlsLine) ? string.Empty : controlsLine.Trim();
-        _encounterLineText.gameObject.SetActive(showEncounterDetails);
-        _enemyLineText.gameObject.SetActive(showEncounterDetails);
-        _encounterLineText.text = string.IsNullOrWhiteSpace(encounterLine) ? string.Empty : encounterLine.Trim();
-        _enemyLineText.text = string.IsNullOrWhiteSpace(enemyLine) ? string.Empty : enemyLine.Trim();
+        _combatEncounterText.text = string.IsNullOrWhiteSpace(encounterLine) ? "战斗已触发" : encounterLine.Trim();
+        _combatControlsText.gameObject.SetActive(showEncounterDetails);
+        _combatControlsText.text = string.IsNullOrWhiteSpace(controlsLine) ? "Space / J / 鼠标左键 攻击" : controlsLine.Trim();
+        _combatPlayerText.text = string.IsNullOrWhiteSpace(playerLine) ? "玩家状态未知" : playerLine.Trim();
+        _combatEnemyText.text = string.IsNullOrWhiteSpace(enemyLine) ? "敌人状态未知" : enemyLine.Trim();
 
-        float targetHeight = showEncounterDetails ? 118f : 74f;
-        _combatPanel.sizeDelta = new Vector2(_combatPanel.sizeDelta.x, targetHeight);
+        _combatPlayerFill.fillAmount = TryExtractFraction(playerLine, out float playerNormalized, out _) ? playerNormalized : 0.65f;
+        _combatEnemyFill.fillAmount = TryExtractFraction(enemyLine, out float enemyNormalized, out _) ? enemyNormalized : 0.8f;
 
-        if (_combatEmberEffect != null)
-        {
-            _combatEmberEffect.SetPanicMode(showEncounterDetails || !string.IsNullOrWhiteSpace(enemyLine));
-        }
-
-        LayoutRebuilder.ForceRebuildLayoutImmediate(_combatPanel);
+        RefreshCombatTint();
     }
 
     public void HideCombatPanel()
@@ -233,27 +257,12 @@ public sealed class HudCanvasView : MonoBehaviour
         {
             _combatPanel.gameObject.SetActive(false);
         }
-
-        if (_combatEmberEffect != null)
-        {
-            _combatEmberEffect.SetPanicMode(false);
-        }
     }
 
     public void SetCombatAlertState(bool isInDanger)
     {
-        if (isInDanger)
-        {
-            SetCombatPanel(true, "危险迫近", "保持移动，准备应战", string.Empty, string.Empty, false);
-            if (_combatEmberEffect != null)
-            {
-                _combatEmberEffect.SetPanicMode(true);
-            }
-        }
-        else
-        {
-            HideCombatPanel();
-        }
+        _combatDanger = isInDanger;
+        RefreshCombatTint();
     }
 
     public void SetWorldMarker(bool visible, Camera worldCamera, Vector3 worldPosition, string markerText)
@@ -276,20 +285,19 @@ public sealed class HudCanvasView : MonoBehaviour
             return;
         }
 
-        RectTransform rootRect = _worldMarkerRoot;
         Vector3 clampedScreen = new Vector3(
-            Mathf.Clamp(screenPosition.x, 16f, Screen.width - 16f),
-            Mathf.Clamp(screenPosition.y, 16f, Screen.height - 96f),
+            Mathf.Clamp(screenPosition.x, 26f, Screen.width - 26f),
+            Mathf.Clamp(screenPosition.y, 34f, Screen.height - 110f),
             screenPosition.z);
 
-        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(rootRect, clampedScreen, null, out Vector2 localPoint))
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(_worldMarkerRoot, clampedScreen, null, out Vector2 localPoint))
         {
             HideWorldMarker();
             return;
         }
 
         _worldMarker.gameObject.SetActive(true);
-        _worldMarker.anchoredPosition = localPoint + new Vector2(0f, 18f);
+        _worldMarker.anchoredPosition = localPoint + new Vector2(0f, 30f);
         _worldMarkerText.text = string.IsNullOrWhiteSpace(markerText) ? "目标" : markerText.Trim();
     }
 
@@ -316,77 +324,160 @@ public sealed class HudCanvasView : MonoBehaviour
 
         _worldMarker.gameObject.SetActive(true);
         _worldMarker.anchoredPosition = anchoredPosition;
-        if (_worldMarkerText != null)
-        {
-            _worldMarkerText.text = string.IsNullOrWhiteSpace(markerText) ? "目标" : markerText.Trim();
-        }
+        _worldMarkerText.text = string.IsNullOrWhiteSpace(markerText) ? "目标" : markerText.Trim();
+    }
+
+    private void BuildLayout()
+    {
+        BuildStatusPanel();
+        BuildQuestPanel();
+        BuildCompletionBanner();
+        BuildInteractionPrompt();
+        BuildCombatPanel();
+        BuildWorldMarker();
+    }
+
+    private void BuildStatusPanel()
+    {
+        RectTransform inner = CreateCard(
+            "StatusPanel",
+            transform,
+            new Vector2(0f, 1f),
+            new Vector2(0f, 1f),
+            new Vector2(0f, 1f),
+            new Vector2(266f, 104f),
+            new Vector2(22f, -20f),
+            new Color(0.03f, 0.04f, 0.06f, 0.92f),
+            new Color(0.09f, 0.11f, 0.15f, 0.94f),
+            out _statusPanel);
+        _statusGroup = UiFactory.GetOrAddCanvasGroup(_statusPanel.gameObject);
+
+        TMP_Text eyebrow = CreateEyebrow(inner, "Eyebrow", string.Empty, new Vector2(0f, -18f));
+        eyebrow.gameObject.SetActive(false);
+
+        _statusTitleText = UiFactory.CreateText(
+            "StatusTitle",
+            inner,
+            new Vector2(0f, 1f),
+            new Vector2(1f, 1f),
+            new Vector2(0f, 1f),
+            new Vector2(-34f, 24f),
+            new Vector2(18f, -32f),
+            _theme.DisplayFont,
+            19,
+            FontStyle.Bold,
+            TextAnchor.MiddleLeft,
+            _theme.PrimaryText);
+
+        _statusBodyText = UiFactory.CreateText(
+            "StatusBody",
+            inner,
+            new Vector2(0f, 0f),
+            new Vector2(0f, 0f),
+            new Vector2(0f, 0f),
+            new Vector2(52f, 16f),
+            new Vector2(18f, 30f),
+            _theme.BodyFont,
+            13,
+            FontStyle.Bold,
+            TextAnchor.MiddleLeft,
+            _theme.SecondaryText);
+
+        RectTransform barRoot = UiFactory.CreateRect(
+            "StatusHealthBar",
+            inner,
+            new Vector2(0f, 0f),
+            new Vector2(1f, 0f),
+            new Vector2(0f, 0f),
+            new Vector2(-36f, 8f),
+            new Vector2(18f, 12f));
+        Image barBackground = UiFactory.CreateImage("BarBackground", barRoot, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0f, 0f, 0f, 0f));
+        barBackground.raycastTarget = false;
+        _statusHealthFill = UiFactory.CreateImage("BarFill", barRoot, Vector2.zero, Vector2.one, new Vector2(0f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.77f, 0.29f, 0.24f, 0.96f));
+        _statusHealthFill.type = Image.Type.Filled;
+        _statusHealthFill.fillMethod = Image.FillMethod.Horizontal;
+        _statusHealthFill.fillOrigin = 0;
+
+        _statusMetaText = UiFactory.CreateText(
+            "StatusMeta",
+            inner,
+            new Vector2(1f, 0f),
+            new Vector2(1f, 0f),
+            new Vector2(1f, 0f),
+            new Vector2(92f, 18f),
+            new Vector2(-18f, 30f),
+            _theme.BodyFont,
+            12,
+            FontStyle.Bold,
+            TextAnchor.MiddleRight,
+            _theme.Brass);
     }
 
     private void BuildQuestPanel()
     {
-        _questPanel = UiFactory.CreateRect(
+        RectTransform inner = CreateCard(
             "QuestPanel",
             transform,
             new Vector2(1f, 1f),
             new Vector2(1f, 1f),
             new Vector2(1f, 1f),
-            new Vector2(336f, 112f),
-            new Vector2(-24f, -24f));
+            new Vector2(332f, 126f),
+            new Vector2(-22f, -20f),
+            new Color(0.04f, 0.05f, 0.08f, 0.9f),
+            new Color(0.09f, 0.1f, 0.14f, 0.95f),
+            out _questPanel);
         _questGroup = UiFactory.GetOrAddCanvasGroup(_questPanel.gameObject);
-        CreatePanelShadow(_questPanel, new Vector2(14f, -14f), new Vector2(18f, 18f), new Color(0f, 0f, 0f, 0.24f));
 
-        UiFactory.CreateImage("QuestOuter", _questPanel, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.05f, 0.06f, 0.08f, 0.82f));
-        RectTransform inner = UiFactory.CreateRect("QuestInner", _questPanel, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-6f, -6f), Vector2.zero);
-        UiFactory.CreateImage("QuestInnerFill", inner, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.12f, 0.14f, 0.17f, 0.62f));
-        CreateAccentLine(inner, 10f);
-        CreateCornerBrackets(inner, 10f, 12f, new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.48f));
+        TMP_Text eyebrow = CreateEyebrow(inner, "Eyebrow", string.Empty, new Vector2(0f, -18f));
+        eyebrow.gameObject.SetActive(false);
 
         _questTitleText = UiFactory.CreateText(
             "QuestTitle",
             inner,
             new Vector2(0f, 1f),
             new Vector2(1f, 1f),
-            new Vector2(0.5f, 1f),
-            new Vector2(-28f, 22f),
-            new Vector2(0f, -10f),
+            new Vector2(0f, 1f),
+            new Vector2(-34f, 26f),
+            new Vector2(18f, -40f),
             _theme.DisplayFont,
-            13,
+            18,
             FontStyle.Bold,
             TextAnchor.MiddleLeft,
-            _theme.Brass);
+            _theme.PrimaryText);
 
         _questBodyText = UiFactory.CreateText(
             "QuestBody",
             inner,
             new Vector2(0f, 0f),
             new Vector2(1f, 1f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(-28f, -40f),
-            new Vector2(0f, -10f),
+            new Vector2(0f, 1f),
+            new Vector2(-36f, -68f),
+            new Vector2(18f, -66f),
             _theme.BodyFont,
             16,
-            FontStyle.Bold,
+            FontStyle.Normal,
             TextAnchor.UpperLeft,
-            _theme.PrimaryText);
+            _theme.SecondaryText);
+        _questBodyText.lineSpacing = 4f;
     }
 
     private void BuildCompletionBanner()
     {
-        _completionBanner = UiFactory.CreateRect(
+        RectTransform inner = CreateCard(
             "CompletionBanner",
             transform,
             new Vector2(0.5f, 1f),
             new Vector2(0.5f, 1f),
             new Vector2(0.5f, 1f),
-            new Vector2(440f, 72f),
-            new Vector2(0f, -26f));
+            new Vector2(420f, 68f),
+            new Vector2(0f, -22f),
+            new Color(0.12f, 0.17f, 0.12f, 0.92f),
+            new Color(0.18f, 0.24f, 0.16f, 0.95f),
+            out _completionBanner);
         _completionBannerGroup = UiFactory.GetOrAddCanvasGroup(_completionBanner.gameObject);
-        CreatePanelShadow(_completionBanner, new Vector2(16f, -14f), new Vector2(22f, 18f), new Color(0f, 0f, 0f, 0.26f));
 
-        UiFactory.CreateImage("CompletionOuter", _completionBanner, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.12f, 0.17f, 0.12f, 0.88f));
-        RectTransform inner = UiFactory.CreateRect("CompletionInner", _completionBanner, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-6f, -6f), Vector2.zero);
-        UiFactory.CreateImage("CompletionInnerFill", inner, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.2f, 0.28f, 0.18f, 0.76f));
-        CreateCornerBrackets(inner, 10f, 12f, new Color(_theme.PrimaryText.r, _theme.PrimaryText.g, _theme.PrimaryText.b, 0.35f));
+        TMP_Text eyebrow = CreateEyebrow(inner, "Eyebrow", string.Empty, new Vector2(0f, -14f));
+        eyebrow.gameObject.SetActive(false);
 
         _completionBannerText = UiFactory.CreateText(
             "CompletionText",
@@ -394,75 +485,53 @@ public sealed class HudCanvasView : MonoBehaviour
             Vector2.zero,
             Vector2.one,
             new Vector2(0.5f, 0.5f),
-            new Vector2(-32f, -18f),
-            Vector2.zero,
+            new Vector2(-34f, -24f),
+            new Vector2(0f, 4f),
             _theme.BodyFont,
             16,
             FontStyle.Bold,
-            TextAnchor.MiddleLeft,
+            TextAnchor.MiddleCenter,
             _theme.PrimaryText);
     }
 
     private void BuildInteractionPrompt()
     {
-        _interactionPrompt = UiFactory.CreateRect(
+        RectTransform inner = CreateCard(
             "InteractionPrompt",
             transform,
             new Vector2(0.5f, 0f),
             new Vector2(0.5f, 0f),
             new Vector2(0.5f, 0f),
-            new Vector2(InteractionPromptWidth, InteractionPromptHeight),
-            new Vector2(0f, 140f));
+            new Vector2(610f, 92f),
+            new Vector2(0f, 26f),
+            new Color(0.02f, 0.03f, 0.05f, 0.92f),
+            new Color(0.08f, 0.09f, 0.12f, 0.94f),
+            out _interactionPrompt);
         _interactionGroup = UiFactory.GetOrAddCanvasGroup(_interactionPrompt.gameObject);
-        CreatePanelShadow(_interactionPrompt, new Vector2(16f, -16f), new Vector2(24f, 22f), new Color(0f, 0f, 0f, 0.24f));
 
-        Image interactionOuter = UiFactory.CreateImage("InteractionOuter", _interactionPrompt, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(_theme.Charcoal.r, _theme.Charcoal.g, _theme.Charcoal.b, 0.9f));
-        Sprite interactionPromptSprite = _theme.InteractionPromptSprite;
-        if (interactionPromptSprite != null)
-        {
-            UiFactory.ApplySprite(interactionOuter, interactionPromptSprite);
-            interactionOuter.color = Color.white;
-        }
-        RectTransform inner = UiFactory.CreateRect("InteractionInner", _interactionPrompt, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-8f, -8f), Vector2.zero);
-        UiFactory.CreateImage("InteractionInnerFill", inner, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.12f, 0.14f, 0.17f, 0.7f));
-        CreateAccentLine(inner, 22f);
-        CreateCornerBrackets(inner, 18f, 16f, new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.4f));
-
-        RectTransform keyBadgeFrame = UiFactory.CreateRect(
-            "KeyBadge",
+        RectTransform keyPlate = UiFactory.CreateRect(
+            "KeyPlate",
             inner,
             new Vector2(0f, 0.5f),
             new Vector2(0f, 0.5f),
             new Vector2(0f, 0.5f),
-            new Vector2(86f, 86f),
-            new Vector2(44f, -10f));
-        Image keyBadgeOuter = UiFactory.CreateImage("KeyBadgeOuter", keyBadgeFrame, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.52f));
-        Image keyBadgeInner = UiFactory.CreateImage("KeyBadgeInner", keyBadgeFrame, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-4f, -4f), Vector2.zero, new Color(_theme.Slate.r, _theme.Slate.g, _theme.Slate.b, 0.98f));
-        Sprite keycapBadgeSprite = _theme.KeycapBadgeSprite;
-        if (keycapBadgeSprite != null)
-        {
-            UiFactory.ApplySprite(keyBadgeOuter, keycapBadgeSprite);
-            keyBadgeOuter.color = Color.white;
-            keyBadgeInner.color = new Color(0f, 0f, 0f, 0f);
-        }
-        else
-        {
-            CreateTypewriterBadgeTicks(keyBadgeFrame, new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.28f));
-        }
-
+            new Vector2(64f, 64f),
+            new Vector2(18f, 0f));
+        UiFactory.CreateImage("KeyPlateOuter", keyPlate, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.76f));
+        UiFactory.CreateImage("KeyPlateInner", keyPlate, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-6f, -6f), Vector2.zero, new Color(0.12f, 0.1f, 0.08f, 0.98f));
         _interactionKeyText = UiFactory.CreateText(
             "KeyText",
-            keyBadgeFrame,
+            keyPlate,
             Vector2.zero,
             Vector2.one,
             new Vector2(0.5f, 0.5f),
-            new Vector2(-10f, -8f),
+            new Vector2(-10f, -10f),
             Vector2.zero,
             _theme.DisplayFont,
-            28,
-            FontStyle.Normal,
+            22,
+            FontStyle.Bold,
             TextAnchor.MiddleCenter,
-            _theme.WaxWhiteText);
+            _theme.PrimaryText);
         _interactionKeyText.characterSpacing = 3f;
 
         _interactionTitleText = UiFactory.CreateText(
@@ -470,95 +539,117 @@ public sealed class HudCanvasView : MonoBehaviour
             inner,
             new Vector2(0f, 1f),
             new Vector2(1f, 1f),
-            new Vector2(0.5f, 1f),
-            new Vector2(-170f, 36f),
-            new Vector2(90f, -18f),
+            new Vector2(0f, 1f),
+            new Vector2(-112f, 20f),
+            new Vector2(92f, -18f),
             _theme.DisplayFont,
-            24,
-            FontStyle.Normal,
+            14,
+            FontStyle.Bold,
             TextAnchor.MiddleLeft,
-            _theme.MutedBrass);
+            _theme.Brass);
         _interactionTitleText.characterSpacing = 3f;
 
         _interactionHintText = UiFactory.CreateText(
             "InteractionHint",
             inner,
+            new Vector2(0f, 0f),
+            new Vector2(1f, 1f),
             new Vector2(0f, 0.5f),
-            new Vector2(1f, 0.5f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(-170f, 54f),
-            new Vector2(90f, -20f),
+            new Vector2(-112f, -26f),
+            new Vector2(92f, -8f),
             _theme.BodyFont,
-            28,
+            18,
             FontStyle.Normal,
             TextAnchor.MiddleLeft,
-            _theme.MossGreen);
-        _interactionHintText.lineSpacing = 4f;
+            _theme.PrimaryText);
     }
 
     private void BuildCombatPanel()
     {
-        _combatPanel = UiFactory.CreateRect(
+        RectTransform inner = CreateCard(
             "CombatPanel",
             transform,
-            new Vector2(0f, 1f),
-            new Vector2(0f, 1f),
-            new Vector2(0f, 1f),
-            new Vector2(336f, 118f),
-            new Vector2(18f, -18f));
+            new Vector2(1f, 0f),
+            new Vector2(1f, 0f),
+            new Vector2(1f, 0f),
+            new Vector2(344f, 176f),
+            new Vector2(-22f, 24f),
+            new Color(0.09f, 0.03f, 0.03f, 0.94f),
+            new Color(0.14f, 0.05f, 0.06f, 0.95f),
+            out _combatPanel);
         _combatGroup = UiFactory.GetOrAddCanvasGroup(_combatPanel.gameObject);
-        CreatePanelShadow(_combatPanel, new Vector2(14f, -14f), new Vector2(18f, 18f), new Color(0f, 0f, 0f, 0.28f));
 
-        _combatEmberGlow = UiFactory.CreateImage(
-            "CombatEmberGlow",
-            _combatPanel,
+        _combatDangerGlow = UiFactory.CreateImage(
+            "DangerGlow",
+            inner,
             Vector2.zero,
             Vector2.one,
             new Vector2(0.5f, 0.5f),
-            new Vector2(-18f, -18f),
+            new Vector2(18f, 18f),
             Vector2.zero,
-            new Color(_theme.EmberRed.r, _theme.EmberRed.g, _theme.EmberRed.b, 0.22f));
-        Sprite combatEmberSprite = _theme.CombatEmberGlowSprite;
-        if (combatEmberSprite != null)
-        {
-            UiFactory.ApplySprite(_combatEmberGlow, combatEmberSprite);
-            _combatEmberGlow.color = new Color(_theme.EmberRed.r, _theme.EmberRed.g, _theme.EmberRed.b, 0.58f);
-        }
+            new Color(0.7f, 0.19f, 0.16f, 0.12f));
+        _combatDangerGlow.transform.SetAsFirstSibling();
 
-        Image combatOuter = UiFactory.CreateImage("CombatOuter", _combatPanel, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.04f, 0.05f, 0.07f, 0.76f));
-        Sprite combatPanelSprite = _theme.CombatPanelSprite;
-        if (combatPanelSprite != null)
-        {
-            UiFactory.ApplySprite(combatOuter, combatPanelSprite);
-            combatOuter.color = Color.white;
-        }
-        RectTransform inner = UiFactory.CreateRect("CombatInner", _combatPanel, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-6f, -6f), Vector2.zero);
-        UiFactory.CreateImage("CombatInnerFill", inner, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.12f, 0.14f, 0.17f, 0.62f));
-        CreateAccentLine(inner, 10f);
-        CreateCornerBrackets(inner, 10f, 12f, new Color(_theme.Ember.r, _theme.Ember.g, _theme.Ember.b, 0.4f));
-        _combatEmberGlow.transform.SetSiblingIndex(1);
-        _combatEmberGlow.raycastTarget = false;
-        _combatEmberEffect = _combatEmberGlow.gameObject.GetComponent<EmberBreathingEffect>();
-        if (_combatEmberEffect == null)
-        {
-            _combatEmberEffect = _combatEmberGlow.gameObject.AddComponent<EmberBreathingEffect>();
-        }
-        _combatEmberEffect.Configure(1.35f, 0.06f, 0.22f);
-        _combatEmberEffect.SetBaseColor(_combatEmberGlow.color);
-        _combatEmberEffect.SetPanicMode(false);
+        TMP_Text eyebrow = CreateEyebrow(inner, "Eyebrow", string.Empty, new Vector2(0f, -18f));
+        eyebrow.gameObject.SetActive(false);
 
-        VerticalLayoutGroup layout = inner.gameObject.AddComponent<VerticalLayoutGroup>();
-        layout.padding = new RectOffset(14, 14, 10, 10);
-        layout.spacing = 4f;
-        layout.childControlHeight = false;
-        layout.childControlWidth = true;
-        layout.childForceExpandHeight = false;
-        layout.childForceExpandWidth = true;
+        _combatEncounterText = UiFactory.CreateText(
+            "EncounterText",
+            inner,
+            new Vector2(0f, 1f),
+            new Vector2(1f, 1f),
+            new Vector2(0f, 1f),
+            new Vector2(-34f, 24f),
+            new Vector2(18f, -38f),
+            _theme.DisplayFont,
+            17,
+            FontStyle.Bold,
+            TextAnchor.MiddleLeft,
+            _theme.PrimaryText);
 
-        _playerLineText = CreateCombatLine(inner, 18, FontStyle.Bold, _theme.PrimaryText);
-        _combatHintText = CreateCombatLine(inner, 14, FontStyle.Normal, _theme.SecondaryText);
-        _encounterLineText = CreateCombatLine(inner, 14, FontStyle.Normal, _theme.SecondaryText);
-        _enemyLineText = CreateCombatLine(inner, 14, FontStyle.Normal, _theme.SecondaryText);
+        _combatPlayerText = UiFactory.CreateText(
+            "PlayerText",
+            inner,
+            new Vector2(0f, 1f),
+            new Vector2(1f, 1f),
+            new Vector2(0f, 1f),
+            new Vector2(-34f, 18f),
+            new Vector2(18f, -58f),
+            _theme.BodyFont,
+            14,
+            FontStyle.Bold,
+            TextAnchor.MiddleLeft,
+            _theme.PrimaryText);
+        _combatPlayerFill = CreateFilledBar(inner, "PlayerBar", new Vector2(18f, -82f), new Vector2(-34f, 6f), new Color(0.86f, 0.33f, 0.3f, 0.95f));
+
+        _combatEnemyText = UiFactory.CreateText(
+            "EnemyText",
+            inner,
+            new Vector2(0f, 1f),
+            new Vector2(1f, 1f),
+            new Vector2(0f, 1f),
+            new Vector2(-34f, 18f),
+            new Vector2(18f, -100f),
+            _theme.BodyFont,
+            14,
+            FontStyle.Bold,
+            TextAnchor.MiddleLeft,
+            _theme.PrimaryText);
+        _combatEnemyFill = CreateFilledBar(inner, "EnemyBar", new Vector2(18f, -124f), new Vector2(-34f, 6f), new Color(0.92f, 0.59f, 0.28f, 0.95f));
+
+        _combatControlsText = UiFactory.CreateText(
+            "ControlsText",
+            inner,
+            new Vector2(0f, 0f),
+            new Vector2(1f, 0f),
+            new Vector2(0f, 0f),
+            new Vector2(-34f, 22f),
+            new Vector2(18f, 8f),
+            _theme.BodyFont,
+            12,
+            FontStyle.Normal,
+            TextAnchor.MiddleLeft,
+            new Color(_theme.PrimaryText.r, _theme.PrimaryText.g, _theme.PrimaryText.b, 0.78f));
     }
 
     private void BuildWorldMarker()
@@ -568,214 +659,211 @@ public sealed class HudCanvasView : MonoBehaviour
             return;
         }
 
-        _worldMarker = UiFactory.CreateRect(
+        RectTransform inner = CreateCard(
             "WorldMarker",
             _worldMarkerRoot,
             new Vector2(0.5f, 0.5f),
             new Vector2(0.5f, 0.5f),
             new Vector2(0.5f, 0.5f),
-            new Vector2(WorldMarkerWidth, WorldMarkerHeight),
-            Vector2.zero);
+            new Vector2(204f, 62f),
+            Vector2.zero,
+            new Color(0.03f, 0.04f, 0.05f, 0.9f),
+            new Color(0.09f, 0.1f, 0.12f, 0.92f),
+            out _worldMarker);
         _worldMarkerGroup = UiFactory.GetOrAddCanvasGroup(_worldMarker.gameObject);
 
-        UiFactory.CreateImage("WorldMarkerShadow", _worldMarker, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(12f, 10f), new Vector2(0f, -2f), new Color(0f, 0f, 0f, 0.18f));
-        Image worldMarkerBg = UiFactory.CreateImage("WorldMarkerBg", _worldMarker, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(_theme.Charcoal.r, _theme.Charcoal.g, _theme.Charcoal.b, 0.82f));
-        Sprite markerChipSprite = _theme.MarkerChipSprite;
-        if (markerChipSprite != null)
-        {
-            UiFactory.ApplySprite(worldMarkerBg, markerChipSprite);
-            worldMarkerBg.color = Color.white;
-        }
-        UiFactory.CreateImage("WorldMarkerInset", _worldMarker, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-4f, -4f), Vector2.zero, new Color(_theme.Slate.r, _theme.Slate.g, _theme.Slate.b, 0.5f));
-        UiFactory.CreateImage("SmokeTop", _worldMarker, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), new Vector2(-14f, 10f), new Vector2(0f, -2f), new Color(0f, 0f, 0f, 0.18f));
-        UiFactory.CreateImage("SmokeBottom", _worldMarker, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(-20f, 8f), new Vector2(0f, 2f), new Color(0f, 0f, 0f, 0.12f));
-        CreateMarkerIcon(_worldMarker, new Vector2(26f, 0f));
-        _worldMarkerText = UiFactory.CreateText(
-            "WorldMarkerText",
-            _worldMarker,
-            Vector2.zero,
-            Vector2.one,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(-70f, -12f),
-            new Vector2(30f, 0f),
-            _theme.DisplayFont,
-            20,
-            FontStyle.Normal,
-            TextAnchor.MiddleCenter,
-            _theme.WaxWhiteTextSoft);
-        _worldMarkerText.characterSpacing = 1.5f;
-    }
-
-    private TMP_Text CreateCombatLine(Transform parent, int fontSize, FontStyle fontStyle, Color color)
-    {
-        TMP_Text line = UiFactory.CreateText(
-            "Line",
-            parent,
-            Vector2.zero,
-            Vector2.one,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0f, 24f),
-            Vector2.zero,
-            _theme.BodyFont,
-            fontSize,
-            fontStyle,
-            TextAnchor.MiddleLeft,
-            color);
-
-        LayoutElement layoutElement = line.gameObject.AddComponent<LayoutElement>();
-        layoutElement.preferredHeight = 22f;
-        return line;
-    }
-
-    private void HandleModeChanged(UiStateCoordinator.UiMode mode)
-    {
-        SetPanelAlpha(_questGroup, mode == UiStateCoordinator.UiMode.Dialogue ? 0.45f : mode == UiStateCoordinator.UiMode.ChapterComplete ? 0f : 1f);
-        SetPanelAlpha(_completionBannerGroup, mode == UiStateCoordinator.UiMode.ChapterComplete ? 0f : 1f);
-        SetPanelAlpha(_interactionGroup, mode == UiStateCoordinator.UiMode.Dialogue || mode == UiStateCoordinator.UiMode.ChapterComplete ? 0f : 1f);
-        SetPanelAlpha(_combatGroup, mode == UiStateCoordinator.UiMode.Dialogue ? 0.4f : mode == UiStateCoordinator.UiMode.ChapterComplete ? 0f : 1f);
-        SetPanelAlpha(_worldMarkerGroup, mode == UiStateCoordinator.UiMode.Dialogue || mode == UiStateCoordinator.UiMode.ChapterComplete ? 0.55f : 1f);
-    }
-
-    private void SetPanelAlpha(CanvasGroup group, float alpha)
-    {
-        if (group == null)
-        {
-            return;
-        }
-
-        group.alpha = alpha;
-    }
-
-    private void CreateAccentLine(Transform parent, float leftInset)
-    {
-        Image line = UiFactory.CreateImage(
-            "AccentLine",
-            parent,
-            new Vector2(0f, 1f),
-            new Vector2(1f, 1f),
-            new Vector2(0.5f, 1f),
-            new Vector2(-(leftInset * 2f), 2f),
-            new Vector2(0f, -1f),
-            new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.75f));
-        line.raycastTarget = false;
-    }
-
-    private void CreatePanelShadow(RectTransform panel, Vector2 offset, Vector2 expand, Color color)
-    {
-        Image shadow = UiFactory.CreateImage(
-            "PanelShadow",
-            panel,
-            Vector2.zero,
-            Vector2.one,
-            new Vector2(0.5f, 0.5f),
-            expand,
-            offset,
-            color);
-        shadow.raycastTarget = false;
-        shadow.transform.SetAsFirstSibling();
-    }
-
-    private void CreateCornerBrackets(Transform parent, float inset, float length, Color color)
-    {
-        CreateCornerBracket(parent, "TopLeft", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), inset, -inset, length, 2f, color);
-        CreateCornerBracket(parent, "TopRight", new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), -inset, -inset, length, 2f, color);
-        CreateCornerBracket(parent, "BottomLeft", new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(0f, 0f), inset, inset, length, 2f, color);
-        CreateCornerBracket(parent, "BottomRight", new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(1f, 0f), -inset, inset, length, 2f, color);
-    }
-
-    private void CreateCornerBracket(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, float x, float y, float length, float thickness, Color color)
-    {
-        Image horizontal = UiFactory.CreateImage(
-            $"{name}_H",
-            parent,
-            anchorMin,
-            anchorMax,
-            pivot,
-            new Vector2(length, thickness),
-            new Vector2(x, y),
-            color);
-        horizontal.raycastTarget = false;
-
-        Image vertical = UiFactory.CreateImage(
-            $"{name}_V",
-            parent,
-            anchorMin,
-            anchorMax,
-            pivot,
-            new Vector2(thickness, length),
-            new Vector2(x, y),
-            color);
-        vertical.raycastTarget = false;
-    }
-
-    private void CreateTypewriterBadgeTicks(Transform parent, Color color)
-    {
-        Image topTick = UiFactory.CreateImage(
-            "BadgeTickTop",
-            parent,
-            new Vector2(0.5f, 1f),
-            new Vector2(0.5f, 1f),
-            new Vector2(0.5f, 1f),
-            new Vector2(30f, 2f),
-            new Vector2(0f, -10f),
-            color);
-        topTick.raycastTarget = false;
-
-        Image bottomTick = UiFactory.CreateImage(
-            "BadgeTickBottom",
-            parent,
-            new Vector2(0.5f, 0f),
-            new Vector2(0.5f, 0f),
-            new Vector2(0.5f, 0f),
-            new Vector2(30f, 2f),
-            new Vector2(0f, 10f),
-            color);
-        bottomTick.raycastTarget = false;
-    }
-
-    private void CreateMarkerIcon(Transform parent, Vector2 anchoredPosition)
-    {
         RectTransform iconRoot = UiFactory.CreateRect(
-            "MarkerIcon",
-            parent,
+            "MarkerSigil",
+            inner,
             new Vector2(0f, 0.5f),
             new Vector2(0f, 0.5f),
             new Vector2(0.5f, 0.5f),
             new Vector2(28f, 28f),
-            anchoredPosition);
-
-        Image diamond = UiFactory.CreateImage(
-            "MarkerDiamond",
-            iconRoot,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(14f, 14f),
-            Vector2.zero,
-            new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.78f));
+            new Vector2(26f, 0f));
+        Image diamond = UiFactory.CreateImage("MarkerDiamond", iconRoot, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(16f, 16f), Vector2.zero, _theme.Brass);
         diamond.rectTransform.localEulerAngles = new Vector3(0f, 0f, 45f);
-        diamond.raycastTarget = false;
 
-        Image crossH = UiFactory.CreateImage(
-            "MarkerCrossH",
-            iconRoot,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(22f, 1.5f),
+        _worldMarkerText = UiFactory.CreateText(
+            "WorldMarkerText",
+            inner,
             Vector2.zero,
-            new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.38f));
-        crossH.raycastTarget = false;
+            Vector2.one,
+            new Vector2(0.5f, 0.5f),
+            new Vector2(-60f, -14f),
+            new Vector2(20f, 0f),
+            _theme.DisplayFont,
+            16,
+            FontStyle.Bold,
+            TextAnchor.MiddleCenter,
+            _theme.PrimaryText);
+    }
 
-        Image crossV = UiFactory.CreateImage(
-            "MarkerCrossV",
-            iconRoot,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(1.5f, 22f),
-            Vector2.zero,
-            new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.38f));
-        crossV.raycastTarget = false;
+    private void HandleModeChanged(UiStateCoordinator.UiMode mode)
+    {
+        SetPanelAlpha(_questGroup, mode == UiStateCoordinator.UiMode.Dialogue ? 0.38f : mode == UiStateCoordinator.UiMode.Inventory ? 0.24f : mode == UiStateCoordinator.UiMode.ChapterComplete ? 0f : 1f);
+        SetPanelAlpha(_completionBannerGroup, mode == UiStateCoordinator.UiMode.ChapterComplete ? 0f : 1f);
+        SetPanelAlpha(_interactionGroup, mode == UiStateCoordinator.UiMode.Dialogue || mode == UiStateCoordinator.UiMode.Inventory || mode == UiStateCoordinator.UiMode.ChapterComplete ? 0f : 1f);
+        SetPanelAlpha(_statusGroup, mode == UiStateCoordinator.UiMode.Dialogue ? 0.38f : mode == UiStateCoordinator.UiMode.Inventory ? 0.5f : mode == UiStateCoordinator.UiMode.ChapterComplete ? 0f : 1f);
+        SetPanelAlpha(_combatGroup, mode == UiStateCoordinator.UiMode.Combat ? 1f : mode == UiStateCoordinator.UiMode.Dialogue || mode == UiStateCoordinator.UiMode.Inventory ? 0.2f : mode == UiStateCoordinator.UiMode.ChapterComplete ? 0f : 1f);
+        SetPanelAlpha(_worldMarkerGroup, mode == UiStateCoordinator.UiMode.Dialogue ? 0.45f : mode == UiStateCoordinator.UiMode.Inventory ? 0.32f : mode == UiStateCoordinator.UiMode.ChapterComplete ? 0.12f : 1f);
+    }
+
+    private void RefreshCombatTint()
+    {
+        if (_combatDangerGlow == null)
+        {
+            return;
+        }
+
+        _combatDangerGlow.color = _combatDanger
+            ? new Color(0.72f, 0.2f, 0.17f, 0.28f)
+            : new Color(0.56f, 0.26f, 0.18f, 0.1f);
+    }
+
+    private RectTransform CreateCard(
+        string name,
+        Transform parent,
+        Vector2 anchorMin,
+        Vector2 anchorMax,
+        Vector2 pivot,
+        Vector2 sizeDelta,
+        Vector2 anchoredPosition,
+        Color outerColor,
+        Color innerColor,
+        out RectTransform root)
+    {
+        root = UiFactory.CreateRect(name, parent, anchorMin, anchorMax, pivot, sizeDelta, anchoredPosition);
+        CreateShadow(root, new Vector2(18f, -18f), new Vector2(24f, 24f), new Color(0f, 0f, 0f, 0.26f));
+        root.SetAsLastSibling();
+
+        Image outer = UiFactory.CreateImage("Outer", root, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, outerColor);
+        outer.raycastTarget = false;
+        Image frame = UiFactory.CreateImage("Frame", root, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-2f, -2f), Vector2.zero, new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.2f));
+        frame.raycastTarget = false;
+
+        RectTransform inner = UiFactory.CreateRect("Inner", root, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-12f, -12f), Vector2.zero);
+        Image fill = UiFactory.CreateImage("Fill", inner, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, innerColor);
+        fill.raycastTarget = false;
+        UiFactory.CreateImage("AccentLine", inner, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f), new Vector2(2f, -18f), new Vector2(0f, 0f), new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.84f));
+        return inner;
+    }
+
+    private TMP_Text CreateEyebrow(Transform parent, string name, string content, Vector2 anchoredPosition)
+    {
+        TMP_Text text = UiFactory.CreateText(
+            name,
+            parent,
+            new Vector2(0f, 1f),
+            new Vector2(1f, 1f),
+            new Vector2(0f, 1f),
+            new Vector2(-40f, 22f),
+            new Vector2(22f, anchoredPosition.y),
+            _theme.DisplayFont,
+            13,
+            FontStyle.Normal,
+            TextAnchor.MiddleLeft,
+            new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.84f));
+        text.text = content;
+        return text;
+    }
+
+    private Image CreateFilledBar(Transform parent, string name, Vector2 anchoredPosition, Vector2 sizeDelta, Color fillColor)
+    {
+        RectTransform barRoot = UiFactory.CreateRect(
+            name,
+            parent,
+            new Vector2(0f, 1f),
+            new Vector2(1f, 1f),
+            new Vector2(0f, 1f),
+            sizeDelta,
+            anchoredPosition);
+        UiFactory.CreateImage("Background", barRoot, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0f, 0f, 0f, 0f));
+        Image fill = UiFactory.CreateImage("Fill", barRoot, Vector2.zero, Vector2.one, new Vector2(0f, 0.5f), Vector2.zero, Vector2.zero, fillColor);
+        fill.type = Image.Type.Filled;
+        fill.fillMethod = Image.FillMethod.Horizontal;
+        fill.fillOrigin = 0;
+        return fill;
+    }
+
+    private void CreateShadow(RectTransform panel, Vector2 offset, Vector2 expand, Color color)
+    {
+        Image shadow = UiFactory.CreateImage("Shadow", panel, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), expand, offset, color);
+        shadow.raycastTarget = false;
+        shadow.transform.SetAsFirstSibling();
+    }
+
+    private void SetPanelAlpha(CanvasGroup group, float alpha)
+    {
+        if (group != null)
+        {
+            group.alpha = alpha;
+        }
+    }
+
+    private static bool TryExtractFraction(string text, out float normalized, out string compactValue)
+    {
+        normalized = 1f;
+        compactValue = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        int slashIndex = text.IndexOf('/');
+        if (slashIndex <= 0 || slashIndex >= text.Length - 1)
+        {
+            return false;
+        }
+
+        int leftEnd = slashIndex - 1;
+        while (leftEnd >= 0 && !char.IsDigit(text[leftEnd]))
+        {
+            leftEnd--;
+        }
+
+        if (leftEnd < 0)
+        {
+            return false;
+        }
+
+        int leftStart = leftEnd;
+        while (leftStart >= 0 && char.IsDigit(text[leftStart]))
+        {
+            leftStart--;
+        }
+
+        int rightStart = slashIndex + 1;
+        while (rightStart < text.Length && !char.IsDigit(text[rightStart]))
+        {
+            rightStart++;
+        }
+
+        if (rightStart >= text.Length)
+        {
+            return false;
+        }
+
+        int rightEnd = rightStart;
+        while (rightEnd < text.Length && char.IsDigit(text[rightEnd]))
+        {
+            rightEnd++;
+        }
+
+        string leftValue = text.Substring(leftStart + 1, leftEnd - leftStart);
+        string rightValue = text.Substring(rightStart, rightEnd - rightStart);
+        if (!int.TryParse(leftValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out int current))
+        {
+            return false;
+        }
+
+        if (!int.TryParse(rightValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out int maximum) || maximum <= 0)
+        {
+            return false;
+        }
+
+        normalized = Mathf.Clamp01(current / (float)maximum);
+        compactValue = current.ToString(CultureInfo.InvariantCulture) + " / " + maximum.ToString(CultureInfo.InvariantCulture);
+        return true;
     }
 }
