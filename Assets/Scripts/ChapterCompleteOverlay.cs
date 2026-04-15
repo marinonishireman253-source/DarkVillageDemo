@@ -5,10 +5,17 @@ using UnityEngine.SceneManagement;
 public class ChapterCompleteOverlay : MonoBehaviour
 {
     public static bool IsVisible { get; private set; }
+    public static event System.Action<bool> OnVisibilityChanged;
 
     private void Update()
     {
-        IsVisible = ShouldShow();
+        bool shouldShow = ShouldShow();
+        if (IsVisible != shouldShow)
+        {
+            IsVisible = shouldShow;
+            OnVisibilityChanged?.Invoke(IsVisible);
+        }
+
         if (!IsVisible)
         {
             HideCanvasView();
@@ -35,25 +42,33 @@ public class ChapterCompleteOverlay : MonoBehaviour
     private bool ShouldShow()
     {
         string sceneName = SceneManager.GetActiveScene().name;
-        return sceneName == SceneLoader.MainSceneName && ChapterState.GetFlag("chapter01_complete");
+        return sceneName == SceneLoader.MainSceneName
+            && GameStateHub.Instance != null
+            && GameStateHub.Instance.IsChapterFlagSet("chapter01_complete");
     }
 
     private void ReturnToMain()
     {
-        ChapterState.ResetRuntime();
+        GameStateHub.Instance?.ResetRuntimeState();
         DialogueEventSystem.ClearFlags();
         SceneLoader.LoadMain();
     }
 
     private void ReloadMain()
     {
-        ChapterState.ResetRuntime();
+        GameStateHub.Instance?.ResetRuntimeState();
         DialogueEventSystem.ClearFlags();
         SceneLoader.ReloadCurrent();
     }
 
     private void OnDisable()
     {
+        if (IsVisible)
+        {
+            IsVisible = false;
+            OnVisibilityChanged?.Invoke(false);
+        }
+
         HideCanvasView();
     }
 

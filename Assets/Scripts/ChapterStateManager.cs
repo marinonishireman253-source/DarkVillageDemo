@@ -22,7 +22,7 @@ public class ChapterState : ScriptableObject
     public class FlagEntry
     {
         public string flagId;
-        public bool value;
+        public string value;
     }
 
     [Header("章节信息")]
@@ -45,30 +45,70 @@ public class ChapterState : ScriptableObject
     public IReadOnlyList<string> CollectedItems => collectedItems;
 
     // 运行时状态（不序列化）
-    private static readonly Dictionary<string, bool> _runtimeFlags = new Dictionary<string, bool>();
+    private static readonly Dictionary<string, string> _runtimeFlags = new Dictionary<string, string>();
     private static readonly HashSet<string> _runtimeCollected = new HashSet<string>();
     private static readonly List<string> _runtimeCollectedOrder = new List<string>();
     private static ChoiceResult _runtimeChoiceResult = ChoiceResult.None;
 
     public static event System.Action OnCollectedItemsChanged;
     public static event System.Action<ChoiceResult> OnChoiceResultChanged;
+    public static event System.Action<string> OnFlagChanged;
 
     public static ChoiceResult CurrentChoiceResult => _runtimeChoiceResult;
 
     public static void SetFlag(string flagId, bool value)
+    {
+        SetFlagValue(flagId, value ? "true" : "false");
+    }
+
+    public static void SetFlagValue(string flagId, string value)
     {
         if (string.IsNullOrWhiteSpace(flagId))
         {
             return;
         }
 
-        _runtimeFlags[flagId] = value;
-        SaveSystem.MarkDirty();
+        string normalizedFlagId = flagId.Trim();
+        string normalizedValue = string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
+
+        if (_runtimeFlags.TryGetValue(normalizedFlagId, out string currentValue) && currentValue == normalizedValue)
+        {
+            return;
+        }
+
+        _runtimeFlags[normalizedFlagId] = normalizedValue;
+        OnFlagChanged?.Invoke(normalizedFlagId);
     }
 
     public static bool GetFlag(string flagId)
     {
-        return _runtimeFlags.TryGetValue(flagId, out bool value) && value;
+        string value = GetFlagValue(flagId);
+        if (string.IsNullOrEmpty(value))
+        {
+            return false;
+        }
+
+        if (bool.TryParse(value, out bool parsedBool))
+        {
+            return parsedBool;
+        }
+
+        if (int.TryParse(value, out int parsedInt))
+        {
+            return parsedInt != 0;
+        }
+
+        return true;
+    }
+
+    public static string GetFlagValue(string flagId)
+    {
+        if (string.IsNullOrWhiteSpace(flagId))
+        {
+            return string.Empty;
+        }
+
+        return _runtimeFlags.TryGetValue(flagId.Trim(), out string value) ? value : string.Empty;
     }
 
     public static void SetChoiceResult(ChoiceResult result)
@@ -79,7 +119,6 @@ public class ChapterState : ScriptableObject
         }
 
         _runtimeChoiceResult = result;
-        SaveSystem.MarkDirty();
         OnChoiceResultChanged?.Invoke(_runtimeChoiceResult);
     }
 
@@ -97,7 +136,6 @@ public class ChapterState : ScriptableObject
         }
 
         _runtimeCollectedOrder.Add(normalizedItemId);
-        SaveSystem.MarkDirty();
         OnCollectedItemsChanged?.Invoke();
     }
 
@@ -108,18 +146,26 @@ public class ChapterState : ScriptableObject
 
     public static void ResetRuntime()
     {
+        string[] changedFlags = new string[_runtimeFlags.Count];
+        _runtimeFlags.Keys.CopyTo(changedFlags, 0);
+
         _runtimeFlags.Clear();
         _runtimeCollected.Clear();
         _runtimeCollectedOrder.Clear();
         _runtimeChoiceResult = ChoiceResult.None;
-        SaveSystem.MarkDirty();
+
+        for (int i = 0; i < changedFlags.Length; i++)
+        {
+            OnFlagChanged?.Invoke(changedFlags[i]);
+        }
+
         OnCollectedItemsChanged?.Invoke();
         OnChoiceResultChanged?.Invoke(_runtimeChoiceResult);
     }
 
-    public static Dictionary<string, bool> GetRuntimeFlagsSnapshot()
+    public static Dictionary<string, string> GetRuntimeFlagsSnapshot()
     {
-        return new Dictionary<string, bool>(_runtimeFlags);
+        return new Dictionary<string, string>(_runtimeFlags);
     }
 
     public static string[] GetCollectedItemsSnapshot()
@@ -127,8 +173,11 @@ public class ChapterState : ScriptableObject
         return _runtimeCollectedOrder.ToArray();
     }
 
-    public static void RestoreRuntimeState(Dictionary<string, bool> flags, IEnumerable<string> collectedItems, ChoiceResult choiceResult = ChoiceResult.None)
+    public static void RestoreRuntimeState(Dictionary<string, string> flags, IEnumerable<string> collectedItems, ChoiceResult choiceResult = ChoiceResult.None)
     {
+        string[] previousFlags = new string[_runtimeFlags.Count];
+        _runtimeFlags.Keys.CopyTo(previousFlags, 0);
+
         _runtimeFlags.Clear();
         _runtimeCollected.Clear();
         _runtimeCollectedOrder.Clear();
@@ -136,14 +185,14 @@ public class ChapterState : ScriptableObject
 
         if (flags != null)
         {
-            foreach (KeyValuePair<string, bool> entry in flags)
+            foreach (KeyValuePair<string, string> entry in flags)
             {
                 if (string.IsNullOrWhiteSpace(entry.Key))
                 {
                     continue;
                 }
 
-                _runtimeFlags[entry.Key] = entry.Value;
+                _runtimeFlags[entry.Key.Trim()] = string.IsNullOrWhiteSpace(entry.Value) ? string.Empty : entry.Value.Trim();
             }
         }
 
@@ -162,6 +211,16 @@ public class ChapterState : ScriptableObject
                     _runtimeCollectedOrder.Add(normalizedItemId);
                 }
             }
+        }
+
+        for (int i = 0; i < previousFlags.Length; i++)
+        {
+            OnFlagChanged?.Invoke(previousFlags[i]);
+        }
+
+        foreach (string flagId in _runtimeFlags.Keys)
+        {
+            OnFlagChanged?.Invoke(flagId);
         }
 
         OnCollectedItemsChanged?.Invoke();

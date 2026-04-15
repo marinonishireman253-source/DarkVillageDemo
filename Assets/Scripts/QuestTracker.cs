@@ -3,6 +3,7 @@ using UnityEngine;
 public class QuestTracker : MonoBehaviour
 {
     public static QuestTracker Instance { get; private set; }
+    public static event System.Action<QuestTracker> OnInstanceChanged;
 
     public string CurrentObjectiveId { get; private set; } = string.Empty;
     public string CurrentObjectiveText { get; private set; } = string.Empty;
@@ -10,6 +11,17 @@ public class QuestTracker : MonoBehaviour
     public string LastCompletedObjectiveText { get; private set; } = string.Empty;
     public Transform CurrentTarget { get; private set; }
     public bool IsCompleted { get; private set; }
+
+    public event System.Action<QuestTracker> OnObjectiveChanged;
+    public event System.Action<QuestTracker> OnObjectiveCompleted;
+
+    public bool IsObjectiveComplete(string objectiveId)
+    {
+        return !string.IsNullOrWhiteSpace(objectiveId)
+            && !string.IsNullOrWhiteSpace(CurrentObjectiveId)
+            && CurrentObjectiveId == objectiveId
+            && IsCompleted;
+    }
 
     private void Awake()
     {
@@ -20,6 +32,7 @@ public class QuestTracker : MonoBehaviour
         }
 
         Instance = this;
+        OnInstanceChanged?.Invoke(this);
     }
 
     private void OnDestroy()
@@ -27,6 +40,7 @@ public class QuestTracker : MonoBehaviour
         if (Instance == this)
         {
             Instance = null;
+            OnInstanceChanged?.Invoke(null);
         }
     }
 
@@ -37,7 +51,7 @@ public class QuestTracker : MonoBehaviour
         CurrentMarkerText = string.IsNullOrWhiteSpace(markerText) ? "目标" : markerText.Trim();
         CurrentTarget = target;
         IsCompleted = false;
-        SaveSystem.MarkDirty();
+        OnObjectiveChanged?.Invoke(this);
     }
 
     public bool CompleteObjective(string objectiveId)
@@ -67,7 +81,8 @@ public class QuestTracker : MonoBehaviour
 
         CurrentObjectiveText = baseText;
         CurrentTarget = null;
-        SaveSystem.MarkDirty();
+        OnObjectiveCompleted?.Invoke(this);
+        OnObjectiveChanged?.Invoke(this);
         return true;
     }
 
@@ -78,6 +93,6 @@ public class QuestTracker : MonoBehaviour
         CurrentMarkerText = "目标";
         CurrentTarget = null;
         IsCompleted = false;
-        SaveSystem.MarkDirty();
+        OnObjectiveChanged?.Invoke(this);
     }
 }

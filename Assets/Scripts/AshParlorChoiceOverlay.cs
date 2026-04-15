@@ -5,8 +5,9 @@ public sealed class AshParlorChoiceOverlay : MonoBehaviour
 {
     public static AshParlorChoiceOverlay Instance { get; private set; }
     public static bool IsVisible => Instance != null && Instance._isVisible;
+    public static event System.Action<bool> OnVisibilityChanged;
 
-    private AshParlorRunController _controller;
+    private FloorRunController _controller;
     private PlayerMover _player;
     private bool _isVisible;
     private bool _riskSelected = true;
@@ -77,7 +78,7 @@ public sealed class AshParlorChoiceOverlay : MonoBehaviour
         RefreshModal();
     }
 
-    public void Show(AshParlorRunController controller, PlayerMover player)
+    public void Show(FloorRunController controller, PlayerMover player)
     {
         if (_isVisible || controller == null)
         {
@@ -91,6 +92,7 @@ public sealed class AshParlorChoiceOverlay : MonoBehaviour
         Time.timeScale = 0f;
         _isVisible = true;
         _openedFrame = Time.frameCount;
+        OnVisibilityChanged?.Invoke(true);
         RefreshModal();
     }
 
@@ -105,6 +107,7 @@ public sealed class AshParlorChoiceOverlay : MonoBehaviour
         _controller = null;
         _player = null;
         _openedFrame = -1;
+        OnVisibilityChanged?.Invoke(false);
 
         if (restoreTimeScale)
         {
@@ -136,7 +139,7 @@ public sealed class AshParlorChoiceOverlay : MonoBehaviour
             return;
         }
 
-        AshParlorRunController controller = _controller;
+        FloorRunController controller = _controller;
         PlayerMover player = _player;
         AshParlorChoiceInteractable.ChoiceKind kind = _riskSelected
             ? AshParlorChoiceInteractable.ChoiceKind.Risky
@@ -153,22 +156,30 @@ public sealed class AshParlorChoiceOverlay : MonoBehaviour
             return;
         }
 
-        string title = "选择房分支";
-        string body =
-            "前方的路断成两条。直接在下面两个按钮里选一条路。";
-        string hint = _riskSelected
-            ? "A / ← / 1 选中风险    D / → / 2 切到保守    Enter / E 确认    Esc 返回"
-            : "D / → / 2 选中保守    A / ← / 1 切到风险    Enter / E 确认    Esc 返回";
+        FloorRunController.ChoiceOverlayConfig config = _controller != null
+            ? _controller.GetChoiceOverlayConfig()
+            : new FloorRunController.ChoiceOverlayConfig(
+                "选择房分支",
+                "前方的路断成两条。直接在下面两个按钮里选一条路。",
+                string.Empty,
+                "风险",
+                "走向更危险的答案。",
+                "保守",
+                "走向更安全的沉默。");
+        string defaultHint = _riskSelected
+            ? "A / ← / 1 选中左侧    D / → / 2 切到右侧    Enter / E 确认    Esc 返回"
+            : "D / → / 2 选中右侧    A / ← / 1 切到左侧    Enter / E 确认    Esc 返回";
+        string hint = string.IsNullOrWhiteSpace(config.Hint) ? defaultHint : config.Hint;
         string primaryLabel = _riskSelected
-            ? "> [风险] 走向低吼\n终局更危险，但可获得线索结晶。"
-            : "[风险] 走向低吼\n终局更危险，但可获得线索结晶。";
+            ? $"> [{config.RiskTitle}] {config.RiskDetail}"
+            : $"[{config.RiskTitle}] {config.RiskDetail}";
         string secondaryLabel = !_riskSelected
-            ? "> [保守] 走向沉寂\n终局更平稳，但不会获得额外线索。"
-            : "[保守] 走向沉寂\n终局更平稳，但不会获得额外线索。";
+            ? $"> [{config.SafeTitle}] {config.SafeDetail}"
+            : $"[{config.SafeTitle}] {config.SafeDetail}";
 
         modalView.ShowBinaryChoice(
-            title,
-            body,
+            config.Title,
+            config.Body,
             hint,
             primaryLabel,
             secondaryLabel,

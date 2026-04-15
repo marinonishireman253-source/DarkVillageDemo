@@ -4,8 +4,14 @@ using System.Collections.Generic;
 
 public sealed class TowerInteriorSlice : MonoBehaviour
 {
+    private enum FloorVariant
+    {
+        AshParlor = 0,
+        MirrorCorridor = 1
+    }
+
     private const string RootName = "__TowerInteriorSlice";
-    private const int LayoutVersion = 18;
+    private const int LayoutVersion = 19;
     private const float RoomZoneOverlap = 4.6f;
     private const float RoomZoneDepth = 5.2f;
     private const float RoomZoneCenterY = 2.35f;
@@ -48,7 +54,7 @@ public sealed class TowerInteriorSlice : MonoBehaviour
     private static readonly Color BackDepthFloorColor = new Color(0.26f, 0.22f, 0.19f);
     private static readonly Color CeilingBeamColor = new Color(0.2f, 0.19f, 0.18f);
     private static readonly Color LampColor = new Color(0.74f, 0.67f, 0.44f);
-    private static readonly StandardRoomTemplate[] RoomTemplates =
+    private static readonly StandardRoomTemplate[] AshRoomTemplates =
     {
         CreateLivingRoomTemplate("Ash_Foyer"),
         CreateStudyRoomTemplate("Ash_Rule"),
@@ -56,6 +62,15 @@ public sealed class TowerInteriorSlice : MonoBehaviour
         CreateStudyRoomTemplate("Ash_Choice"),
         CreateLivingRoomTemplate("Ash_Finale")
     };
+    private static readonly StandardRoomTemplate[] MirrorRoomTemplates =
+    {
+        CreateStudyRoomTemplate("Mirror_Landing", 36f, 8f, 6.1f),
+        CreateStudyRoomTemplate("Mirror_Rule", 34f, 8f, 6.1f),
+        CreateLivingRoomTemplate("Mirror_Pressure", 38f, 8.1f, 6.1f),
+        CreateStudyRoomTemplate("Mirror_Choice", 34f, 8f, 6.1f),
+        CreateLivingRoomTemplate("Mirror_Finale", 38f, 8.1f, 6.1f)
+    };
+    private static StandardRoomTemplate[] RoomTemplates => GetTemplatesForFloor((FloorVariant)GameStateHub.CurrentFloorIndexRuntime);
 
     public static float WalkDepth => RoomTemplates[0].WalkDepth;
     public static Vector2 PlayableXRange => new Vector2(
@@ -69,6 +84,9 @@ public sealed class TowerInteriorSlice : MonoBehaviour
     private PlayerMover _player;
     private RoomCameraZone _startingRoomZone;
     private AshParlorRunController _ashParlorController;
+    private MirrorCorridorRunController _mirrorCorridorController;
+    private FloorRunController _floorController;
+    private FloorVariant _floorVariant;
     [SerializeField] private int _layoutVersion;
 
     public static void Ensure(PlayerMover player)
@@ -149,19 +167,29 @@ public sealed class TowerInteriorSlice : MonoBehaviour
     {
         _player = player;
         _layoutVersion = LayoutVersion;
+        _floorVariant = (FloorVariant)Mathf.Clamp(GameStateHub.CurrentFloorIndexRuntime, 0, 1);
 
-        BuildAshParlorState();
+        BuildFloorState();
         BuildShell();
         BuildRooms();
         BuildRoomDividers();
-        BuildAshParlorSeals();
+        BuildFloorSeals();
         PositionPlayer();
     }
 
-    private void BuildAshParlorState()
+    private void BuildFloorState()
     {
-        Transform stateRoot = CreateGroup(transform, "AshParlorState");
-        _ashParlorController = stateRoot.gameObject.AddComponent<AshParlorRunController>();
+        if (_floorVariant == FloorVariant.MirrorCorridor)
+        {
+            Transform stateRoot = CreateGroup(transform, "MirrorCorridorState");
+            _mirrorCorridorController = stateRoot.gameObject.AddComponent<MirrorCorridorRunController>();
+            _floorController = _mirrorCorridorController;
+            return;
+        }
+
+        Transform ashStateRoot = CreateGroup(transform, "AshParlorState");
+        _ashParlorController = ashStateRoot.gameObject.AddComponent<AshParlorRunController>();
+        _floorController = _ashParlorController;
     }
 
     private void PositionPlayer()
@@ -232,10 +260,11 @@ public sealed class TowerInteriorSlice : MonoBehaviour
             Transform roomRoot = CreateGroup(transform, $"Room_{roomIndex + 1}_{template.TemplateId}", new Vector3(roomCenterX, 0f, 0f));
             BuildRoom(roomRoot, template, roomIndex);
             ConfigureRoomLighting(roomRoot, roomStartX, roomEndX, roomIndex);
+            CreateRoomLightZoneEffect(roomRoot, template, roomStartX, roomEndX, roomIndex);
             CreateRoomLightRig(roomRoot, roomIndex);
             if (roomIndex == PressureRoomIndex)
             {
-                _ashParlorController?.RegisterPressureRoomLights(roomRoot.GetComponentsInChildren<Light>(true));
+                _floorController?.RegisterPressureRoomLights(roomRoot.GetComponentsInChildren<Light>(true));
             }
 
             RoomCameraZone roomZone = CreateRoomCameraZone(roomRoot, template, roomStartX, roomEndX, roomIndex);
@@ -244,7 +273,7 @@ public sealed class TowerInteriorSlice : MonoBehaviour
                 _startingRoomZone = roomZone;
             }
 
-            _ashParlorController?.RegisterRoomBounds(roomIndex, roomStartX, roomEndX);
+            _floorController?.RegisterRoomBounds(roomIndex, roomStartX, roomEndX);
 
             roomStartX = roomEndX;
         }
@@ -265,6 +294,12 @@ public sealed class TowerInteriorSlice : MonoBehaviour
         CreateLocalBlocks(backgroundRoot, template.BackgroundBlocks, roomIndex);
         CreateLocalBlocks(ceilingRoot, template.CeilingBlocks, roomIndex);
         CreateLocalBlocks(accentRoot, template.AccentBlocks, roomIndex);
+
+        if (_floorVariant == FloorVariant.MirrorCorridor)
+        {
+            BuildMirrorRoom(roomRoot, template, roomIndex);
+            return;
+        }
 
         if (roomIndex == LandingRoomIndex)
         {
@@ -296,11 +331,151 @@ public sealed class TowerInteriorSlice : MonoBehaviour
 
     }
 
+    private void BuildMirrorRoom(Transform roomRoot, StandardRoomTemplate template, int roomIndex)
+    {
+        switch (roomIndex)
+        {
+            case LandingRoomIndex:
+                BuildMirrorLandingRoom(roomRoot, template);
+                break;
+            case RuleRoomIndex:
+                BuildMirrorRuleRoom(roomRoot, template);
+                break;
+            case PressureRoomIndex:
+                BuildMirrorPressureRoom(roomRoot, template);
+                break;
+            case ChoiceRoomIndex:
+                BuildMirrorChoiceRoom(roomRoot, template);
+                break;
+            case FinaleRoomIndex:
+                BuildMirrorFinalRoom(roomRoot, template);
+                break;
+        }
+    }
+
     private void BuildLandingRoom(Transform roomRoot, StandardRoomTemplate template)
     {
         BuildLandingRelic(roomRoot, template);
         BuildLandingGuide(roomRoot, template);
         BuildLandingTestRoom(roomRoot, template);
+    }
+
+    private void BuildMirrorLandingRoom(Transform roomRoot, StandardRoomTemplate template)
+    {
+        Transform mirrorRoot = CreateGroup(
+            roomRoot,
+            "MirrorLandingRelic",
+            new Vector3(LandingRelicLocalX + 1.6f, 0f, template.WalkDepth + 0.12f));
+
+        CreateDecorBlock(mirrorRoot, "Base", new Vector3(0f, 0.24f, 0f), new Vector3(1.36f, 0.48f, 1f), new Color(0.18f, 0.17f, 0.18f));
+        CreateDecorBlock(mirrorRoot, "Frame", new Vector3(0f, 1.34f, 0.06f), new Vector3(0.9f, 1.92f, 0.18f), new Color(0.42f, 0.3f, 0.18f));
+        CreateDecorBlock(mirrorRoot, "MirrorFace", new Vector3(0f, 1.34f, 0.16f), new Vector3(0.62f, 1.56f, 0.04f), new Color(0.38f, 0.46f, 0.52f));
+        CreatePointLight(mirrorRoot, "MirrorGlow", new Vector3(0f, 1.46f, 0.22f), new Color(0.68f, 0.76f, 0.86f, 1f), 0.38f, 3.2f, LightRenderMode.ForcePixel);
+
+        InspectionInteractable inspectable = mirrorRoot.gameObject.AddComponent<InspectionInteractable>();
+        inspectable.Configure(
+            "完好的铜镜",
+            "查看",
+            "伊尔萨恩",
+            new[]
+            {
+                "镜面上没有灰，像有人一直在擦。",
+                "这里的反光太慢了，像在等你先动。"
+            },
+            new[]
+            {
+                "别在这里盯太久。镜子会记住你停留的时间。"
+            },
+            new Vector3(0f, 1.2f, 0.1f),
+            new Vector3(1.8f, 2.4f, 1.4f));
+    }
+
+    private void BuildMirrorRuleRoom(Transform roomRoot, StandardRoomTemplate template)
+    {
+        Transform etchingRoot = CreateGroup(
+            roomRoot,
+            "MirrorRuleEtching",
+            new Vector3(-9.8f, 0f, template.WalkDepth + 0.28f));
+        CreateDecorBlock(etchingRoot, "Stone", new Vector3(0f, 1.22f, 0f), new Vector3(1.56f, 2.28f, 0.44f), new Color(0.22f, 0.21f, 0.22f));
+        CreateDecorBlock(etchingRoot, "Etching", new Vector3(0f, 1.36f, 0.24f), new Vector3(1.02f, 1.46f, 0.06f), new Color(0.56f, 0.48f, 0.34f));
+
+        InspectionInteractable inspectable = etchingRoot.gameObject.AddComponent<InspectionInteractable>();
+        inspectable.Configure(
+            "墙上刻痕",
+            "查看",
+            "铜镜长廊",
+            new[]
+            {
+                "走廊的尽头不是出口，是镜子。",
+                "不要相信镜中所见。也不要不信。"
+            },
+            new[]
+            {
+                "刻痕像是被人反复刻深过。"
+            },
+            new Vector3(0f, 1.18f, 0.08f),
+            new Vector3(2.2f, 2.6f, 1.4f));
+
+        AshParlorBrazierInteractable brazier = BuildAshParlorBrazier(roomRoot, template, "MirrorBrazier_1", FirstBrazierLocalX - 0.8f, 1);
+        _floorController?.RegisterFirstBrazier(brazier);
+    }
+
+    private void BuildMirrorPressureRoom(Transform roomRoot, StandardRoomTemplate template)
+    {
+        SimpleEnemyController firstEnemy = BuildEnemy(
+            roomRoot,
+            "Monster_MirrorEcho_A",
+            new Vector3(-6.6f, template.PlayerSpawnHeight, template.WalkDepth),
+            4,
+            1);
+        _floorController?.RegisterPressureEnemy(firstEnemy);
+
+        SimpleEnemyController secondEnemy = BuildEnemy(
+            roomRoot,
+            "Monster_MirrorEcho_B",
+            new Vector3(3.8f, template.PlayerSpawnHeight, template.WalkDepth),
+            4,
+            1);
+        _floorController?.RegisterPressureEnemy(secondEnemy);
+    }
+
+    private void BuildMirrorChoiceRoom(Transform roomRoot, StandardRoomTemplate template)
+    {
+        Transform mirrorRoot = CreateGroup(
+            roomRoot,
+            "MirrorChoiceAnchor",
+            new Vector3(ChoiceAnchorLocalX, 0f, template.WalkDepth + 0.2f));
+        CreateDecorBlock(mirrorRoot, "MirrorBase", new Vector3(0f, 0.28f, 0f), new Vector3(2.4f, 0.56f, 1.18f), new Color(0.18f, 0.17f, 0.18f));
+        CreateDecorBlock(mirrorRoot, "MirrorFrame", new Vector3(0f, 1.74f, 0.08f), new Vector3(2.1f, 2.92f, 0.24f), new Color(0.48f, 0.34f, 0.2f));
+        CreateDecorBlock(mirrorRoot, "MirrorFace", new Vector3(0f, 1.74f, 0.2f), new Vector3(1.62f, 2.36f, 0.05f), new Color(0.32f, 0.38f, 0.44f));
+        CreatePointLight(mirrorRoot, "MirrorBeacon", new Vector3(0f, 1.86f, 0.28f), new Color(0.76f, 0.72f, 0.58f, 1f), 0.48f, 3.8f, LightRenderMode.ForcePixel);
+
+        BoxCollider interaction = mirrorRoot.gameObject.AddComponent<BoxCollider>();
+        interaction.isTrigger = true;
+        interaction.center = new Vector3(0f, 1.46f, 0.08f);
+        interaction.size = new Vector3(3f, 3.4f, 1.6f);
+
+        AshParlorChoicePromptInteractable prompt = mirrorRoot.gameObject.AddComponent<AshParlorChoicePromptInteractable>();
+        prompt.Configure(_floorController, "铜镜", "直面铜镜");
+        _floorController?.RegisterChoicePair(null, null, prompt, mirrorRoot);
+    }
+
+    private void BuildMirrorFinalRoom(Transform roomRoot, StandardRoomTemplate template)
+    {
+        SimpleEnemyController enemy = BuildEnemy(
+            roomRoot,
+            "Monster_MirrorFinalEcho",
+            new Vector3(FinalEnemyLocalX + 0.6f, template.PlayerSpawnHeight, template.WalkDepth),
+            5,
+            1);
+        _floorController?.RegisterFinalEnemy(enemy);
+
+        BuildMirrorRewardPickup(roomRoot, template);
+
+        AshParlorBrazierInteractable brazier = BuildAshParlorBrazier(roomRoot, template, "MirrorBrazier_2", SecondBrazierLocalX, 2);
+        _floorController?.RegisterSecondBrazier(brazier);
+
+        BuildMirrorExit(roomRoot, template);
     }
 
     private void BuildLandingTestRoom(Transform roomRoot, StandardRoomTemplate template)
@@ -476,7 +651,7 @@ public sealed class TowerInteriorSlice : MonoBehaviour
     private void BuildAshParlorFirstBrazier(Transform roomRoot, StandardRoomTemplate template)
     {
         AshParlorBrazierInteractable brazier = BuildAshParlorBrazier(roomRoot, template, "AshBrazier_1", FirstBrazierLocalX, 1);
-        _ashParlorController?.RegisterFirstBrazier(brazier);
+        _floorController?.RegisterFirstBrazier(brazier);
     }
 
     private void BuildPressureEnemy(Transform roomRoot, StandardRoomTemplate template)
@@ -487,7 +662,7 @@ public sealed class TowerInteriorSlice : MonoBehaviour
             new Vector3(PressureEnemyLocalX, template.PlayerSpawnHeight, template.WalkDepth),
             4,
             1);
-        _ashParlorController?.RegisterPressureEnemy(enemy);
+        _floorController?.RegisterPressureEnemy(enemy);
     }
 
     private void BuildFinalEnemy(Transform roomRoot, StandardRoomTemplate template)
@@ -498,7 +673,7 @@ public sealed class TowerInteriorSlice : MonoBehaviour
             new Vector3(FinalEnemyLocalX, template.PlayerSpawnHeight, template.WalkDepth),
             5,
             1);
-        _ashParlorController?.RegisterFinalEnemy(enemy);
+        _floorController?.RegisterFinalEnemy(enemy);
 
         SimpleEnemyController riskEnemy = BuildEnemy(
             roomRoot,
@@ -506,20 +681,45 @@ public sealed class TowerInteriorSlice : MonoBehaviour
             new Vector3(FinalRiskEnemyLocalX, template.PlayerSpawnHeight, template.WalkDepth),
             4,
             1);
-        _ashParlorController?.RegisterRiskBonusEnemy(riskEnemy);
+        _floorController?.RegisterRiskBonusEnemy(riskEnemy);
     }
 
     private SimpleEnemyController BuildEnemy(Transform roomRoot, string objectName, Vector3 localPosition, int healthPoints, int damage)
     {
+        CorePrefabCatalog catalog = CorePrefabCatalog.Load();
+        GameObject enemyPrefab = catalog != null ? catalog.StandardEnemyPrefab : null;
+        if (enemyPrefab == null)
+        {
+            Debug.LogError("[TowerInteriorSlice] Missing StandardEnemy prefab in CorePrefabCatalog.");
+            return null;
+        }
+
         float desiredMonsterHeight = PlayerReferenceHeight * MonsterHeightRatio;
-        Transform monsterRoot = CreateGroup(roomRoot, objectName, localPosition);
-        MonsterSpriteVisual visual = monsterRoot.gameObject.AddComponent<MonsterSpriteVisual>();
-        visual.Configure(desiredMonsterHeight, MonsterSortingOrder, new Vector3(0f, 0.01f, 0f));
+        GameObject enemyObject = Instantiate(enemyPrefab, roomRoot);
+        enemyObject.name = objectName;
+        enemyObject.transform.localPosition = localPosition;
+        enemyObject.transform.localRotation = Quaternion.identity;
+        enemyObject.transform.localScale = Vector3.one;
 
-        CombatantHealth health = monsterRoot.gameObject.AddComponent<CombatantHealth>();
-        health.Configure(healthPoints);
+        MonsterSpriteVisual visual = enemyObject.GetComponent<MonsterSpriteVisual>();
+        if (visual != null)
+        {
+            visual.Configure(desiredMonsterHeight, MonsterSortingOrder, new Vector3(0f, 0.01f, 0f));
+        }
 
-        SimpleEnemyController enemy = monsterRoot.gameObject.AddComponent<SimpleEnemyController>();
+        CombatantHealth health = enemyObject.GetComponent<CombatantHealth>();
+        if (health != null)
+        {
+            health.Configure(healthPoints);
+        }
+
+        SimpleEnemyController enemy = enemyObject.GetComponent<SimpleEnemyController>();
+        if (enemy == null)
+        {
+            Debug.LogError($"[TowerInteriorSlice] StandardEnemy prefab is missing {nameof(SimpleEnemyController)}.", enemyObject);
+            return null;
+        }
+
         enemy.Configure("仪式回响", healthPoints, damage);
         return enemy;
     }
@@ -551,7 +751,7 @@ public sealed class TowerInteriorSlice : MonoBehaviour
             "沉寂回廊",
             "走向沉寂");
 
-        _ashParlorController?.RegisterChoicePair(risky, safe, prompt, prompt != null ? prompt.transform : anchor);
+        _floorController?.RegisterChoicePair(risky, safe, prompt, prompt != null ? prompt.transform : anchor);
     }
 
     private AshParlorChoicePromptInteractable BuildChoicePromptInteractable(Transform roomRoot, StandardRoomTemplate template)
@@ -579,7 +779,7 @@ public sealed class TowerInteriorSlice : MonoBehaviour
         interaction.size = new Vector3(2.2f, 2.2f, 1.8f);
 
         AshParlorChoicePromptInteractable prompt = promptRoot.gameObject.AddComponent<AshParlorChoicePromptInteractable>();
-        prompt.Configure(_ashParlorController, "抉择台", "做出选择");
+        prompt.Configure(_floorController, "抉择台", "做出选择");
         return prompt;
     }
 
@@ -612,14 +812,14 @@ public sealed class TowerInteriorSlice : MonoBehaviour
             : new Color(0.58f, 0.68f, 0.78f, 1f);
 
         AshParlorChoiceInteractable interactable = choiceRoot.gameObject.AddComponent<AshParlorChoiceInteractable>();
-        interactable.Configure(_ashParlorController, choiceKind, choiceLight, renderers.ToArray(), displayName, promptText);
+        interactable.Configure(_floorController, choiceKind, choiceLight, renderers.ToArray(), displayName, promptText);
         return interactable;
     }
 
     private void BuildAshParlorSecondBrazier(Transform roomRoot, StandardRoomTemplate template)
     {
         AshParlorBrazierInteractable brazier = BuildAshParlorBrazier(roomRoot, template, "AshBrazier_2", SecondBrazierLocalX, 2);
-        _ashParlorController?.RegisterSecondBrazier(brazier);
+        _floorController?.RegisterSecondBrazier(brazier);
     }
 
     private void BuildRiskRewardPickup(Transform roomRoot, StandardRoomTemplate template)
@@ -656,36 +856,63 @@ public sealed class TowerInteriorSlice : MonoBehaviour
                 "第三层……记住了。"
             });
         pickup.SetPickupEnabled(false);
-        _ashParlorController?.RegisterRiskRewardPickup(pickup);
+        _floorController?.RegisterRiskRewardPickup(pickup);
+    }
+
+    private void BuildMirrorRewardPickup(Transform roomRoot, StandardRoomTemplate template)
+    {
+        Transform rewardRoot = CreateGroup(
+            roomRoot,
+            "MirrorCorridor_RiskReward",
+            new Vector3(FinalRewardLocalX + 0.4f, 0f, template.WalkDepth + 0.26f));
+
+        CreateDecorBlock(rewardRoot, "Shard_A", new Vector3(-0.18f, 0.82f, 0.04f), new Vector3(0.18f, 0.72f, 0.08f), new Color(0.52f, 0.62f, 0.72f));
+        CreateDecorBlock(rewardRoot, "Shard_B", new Vector3(0.12f, 0.64f, 0.08f), new Vector3(0.14f, 0.46f, 0.06f), new Color(0.6f, 0.7f, 0.82f));
+        CreateDecorBlock(rewardRoot, "Shard_C", new Vector3(0.28f, 0.52f, -0.04f), new Vector3(0.12f, 0.34f, 0.06f), new Color(0.46f, 0.58f, 0.7f));
+        CreatePointLight(rewardRoot, "ShardGlow", new Vector3(0.02f, 0.86f, 0.12f), new Color(0.72f, 0.78f, 0.9f, 1f), 0.58f, 2.8f, LightRenderMode.ForcePixel);
+
+        PickupInteractable pickup = rewardRoot.gameObject.AddComponent<PickupInteractable>();
+        pickup.Configure(
+            "mirror_corridor_shard",
+            "铜镜碎片",
+            "拾起碎片",
+            true,
+            "叙事线索",
+            "一块边缘还在反光的铜镜碎片。凑近时，碎片里映出一扇刻着你名字的门。",
+            "伊尔萨恩",
+            new[]
+            {
+                "这不是过去的倒影。",
+                "它像是在提前演给我看。"
+            });
+        pickup.SetPickupEnabled(false);
+        _floorController?.RegisterRiskRewardPickup(pickup);
     }
 
     private AshParlorBrazierInteractable BuildAshParlorBrazier(Transform roomRoot, StandardRoomTemplate template, string objectName, float localX, int index)
     {
-        Transform brazierRoot = CreateGroup(
-            roomRoot,
-            objectName,
-            new Vector3(localX, 0f, template.WalkDepth + BrazierLocalZOffset));
+        CorePrefabCatalog catalog = CorePrefabCatalog.Load();
+        GameObject brazierPrefab = catalog != null ? catalog.BrazierPrefab : null;
+        if (brazierPrefab == null)
+        {
+            Debug.LogError("[TowerInteriorSlice] Missing Brazier prefab in CorePrefabCatalog.");
+            return null;
+        }
 
-        List<Renderer> renderers = new List<Renderer>();
-        renderers.Add(CreateDecorBlock(brazierRoot, "Pedestal", new Vector3(0f, 0.34f, 0f), new Vector3(0.86f, 0.68f, 0.86f), new Color(0.22f, 0.2f, 0.19f)));
-        renderers.Add(CreateDecorBlock(brazierRoot, "Bowl", new Vector3(0f, 0.92f, 0.04f), new Vector3(1.08f, 0.18f, 1.08f), new Color(0.3f, 0.24f, 0.2f)));
-        renderers.Add(CreateDecorBlock(brazierRoot, "Ember", new Vector3(0f, 1.1f, 0.04f), new Vector3(0.5f, 0.34f, 0.5f), new Color(0.28f, 0.2f, 0.16f)));
+        GameObject brazierObject = Instantiate(brazierPrefab, roomRoot);
+        brazierObject.name = objectName;
+        brazierObject.transform.localPosition = new Vector3(localX, 0f, template.WalkDepth + BrazierLocalZOffset);
+        brazierObject.transform.localRotation = Quaternion.identity;
+        brazierObject.transform.localScale = Vector3.one;
 
-        Transform lightRoot = CreateGroup(brazierRoot, "Glow", new Vector3(0f, 1.18f, 0.04f));
-        Light flameLight = lightRoot.gameObject.AddComponent<Light>();
-        flameLight.type = LightType.Point;
-        flameLight.shadows = LightShadows.None;
-        flameLight.range = 1.8f;
-        flameLight.intensity = 0.08f;
-        flameLight.color = new Color(0.46f, 0.32f, 0.22f, 1f);
+        AshParlorBrazierInteractable brazier = brazierObject.GetComponent<AshParlorBrazierInteractable>();
+        if (brazier == null)
+        {
+            Debug.LogError($"[TowerInteriorSlice] Brazier prefab is missing {nameof(AshParlorBrazierInteractable)}.", brazierObject);
+            return null;
+        }
 
-        BoxCollider interaction = brazierRoot.gameObject.AddComponent<BoxCollider>();
-        interaction.isTrigger = true;
-        interaction.center = new Vector3(0f, 0.96f, 0.04f);
-        interaction.size = new Vector3(1.6f, 1.8f, 1.5f);
-
-        AshParlorBrazierInteractable brazier = brazierRoot.gameObject.AddComponent<AshParlorBrazierInteractable>();
-        brazier.Configure(_ashParlorController, index, flameLight, renderers.ToArray());
+        brazier.Configure(_floorController, index);
         return brazier;
     }
 
@@ -717,8 +944,40 @@ public sealed class TowerInteriorSlice : MonoBehaviour
         interaction.size = new Vector3(2.4f, 3.5f, 1.4f);
 
         AshParlorExitInteractable exitInteractable = exitRoot.gameObject.AddComponent<AshParlorExitInteractable>();
-        exitInteractable.Configure(_ashParlorController, exitLight, renderers.ToArray());
-        _ashParlorController?.RegisterExit(exitInteractable);
+        exitInteractable.Configure(_floorController, exitLight, renderers.ToArray());
+        _floorController?.RegisterExit(exitInteractable);
+    }
+
+    private void BuildMirrorExit(Transform roomRoot, StandardRoomTemplate template)
+    {
+        Transform exitRoot = CreateGroup(
+            roomRoot,
+            "MirrorCorridor_Exit",
+            new Vector3(ExitLocalX - 0.8f, 0f, template.WalkDepth + ExitLocalZOffset));
+
+        List<Renderer> renderers = new List<Renderer>();
+        renderers.Add(CreateDecorBlock(exitRoot, "Frame_Left", new Vector3(-0.72f, 1.65f, 0f), new Vector3(0.24f, 3.3f, 0.54f), new Color(0.22f, 0.22f, 0.24f)));
+        renderers.Add(CreateDecorBlock(exitRoot, "Frame_Right", new Vector3(0.72f, 1.65f, 0f), new Vector3(0.24f, 3.3f, 0.54f), new Color(0.22f, 0.22f, 0.24f)));
+        renderers.Add(CreateDecorBlock(exitRoot, "Lintel", new Vector3(0f, 3.18f, 0f), new Vector3(1.8f, 0.22f, 0.54f), new Color(0.22f, 0.22f, 0.24f)));
+        renderers.Add(CreateDecorBlock(exitRoot, "DoorGlow", new Vector3(0f, 1.52f, -0.04f), new Vector3(1.08f, 2.62f, 0.08f), new Color(0.38f, 0.32f, 0.18f)));
+        renderers.Add(CreateDecorBlock(exitRoot, "MirrorSeal", new Vector3(0f, 1.52f, 0.06f), new Vector3(1.16f, 2.72f, 0.14f), new Color(0.2f, 0.22f, 0.26f)));
+
+        Transform lightRoot = CreateGroup(exitRoot, "SealLight", new Vector3(0f, 1.82f, 0.12f));
+        Light exitLight = lightRoot.gameObject.AddComponent<Light>();
+        exitLight.type = LightType.Point;
+        exitLight.shadows = LightShadows.None;
+        exitLight.range = 2.2f;
+        exitLight.intensity = 0.14f;
+        exitLight.color = new Color(0.3f, 0.28f, 0.18f, 1f);
+
+        BoxCollider interaction = exitRoot.gameObject.AddComponent<BoxCollider>();
+        interaction.isTrigger = true;
+        interaction.center = new Vector3(0f, 1.55f, 0f);
+        interaction.size = new Vector3(2.4f, 3.5f, 1.4f);
+
+        AshParlorExitInteractable exitInteractable = exitRoot.gameObject.AddComponent<AshParlorExitInteractable>();
+        exitInteractable.Configure(_floorController, exitLight, renderers.ToArray());
+        _floorController?.RegisterExit(exitInteractable);
     }
 
     private static Renderer CreateDecorBlock(Transform parent, string name, Vector3 localCenter, Vector3 size, Color color)
@@ -794,7 +1053,7 @@ public sealed class TowerInteriorSlice : MonoBehaviour
         }
     }
 
-    private void BuildAshParlorSeals()
+    private void BuildFloorSeals()
     {
         BuildSealBarrier(1, "Seal_PressureDoor", registerPressure: true);
         BuildSealBarrier(3, "Seal_FinaleDoor", registerPressure: false);
@@ -846,15 +1105,15 @@ public sealed class TowerInteriorSlice : MonoBehaviour
 
         if (registerPressure)
         {
-            _ashParlorController?.RegisterPressureSeal(seal);
+            _floorController?.RegisterPressureSeal(seal);
         }
         else
         {
-            _ashParlorController?.RegisterFinaleSeal(seal);
+            _floorController?.RegisterFinaleSeal(seal);
         }
     }
 
-    private static void ConfigureRoomLighting(Transform roomRoot, float roomStartX, float roomEndX, int roomIndex)
+    private void ConfigureRoomLighting(Transform roomRoot, float roomStartX, float roomEndX, int roomIndex)
     {
         if (roomRoot == null)
         {
@@ -865,6 +1124,12 @@ public sealed class TowerInteriorSlice : MonoBehaviour
         if (lightingZone == null)
         {
             lightingZone = roomRoot.gameObject.AddComponent<RoomLightingZone>();
+        }
+
+        if (_floorVariant == FloorVariant.MirrorCorridor)
+        {
+            ConfigureMirrorRoomLighting(lightingZone, roomStartX, roomEndX, roomIndex);
+            return;
         }
 
         switch (roomIndex)
@@ -963,7 +1228,7 @@ public sealed class TowerInteriorSlice : MonoBehaviour
         }
     }
 
-    private static void CreateRoomLightRig(Transform roomRoot, int roomIndex)
+    private void CreateRoomLightRig(Transform roomRoot, int roomIndex)
     {
         if (roomRoot == null)
         {
@@ -971,6 +1236,12 @@ public sealed class TowerInteriorSlice : MonoBehaviour
         }
 
         Transform lightRoot = CreateGroup(roomRoot, "Lights");
+
+        if (_floorVariant == FloorVariant.MirrorCorridor)
+        {
+            CreateMirrorRoomLightRig(lightRoot, roomIndex);
+            return;
+        }
 
         switch (roomIndex)
         {
@@ -997,6 +1268,183 @@ public sealed class TowerInteriorSlice : MonoBehaviour
                 CreateSconceRig(lightRoot, "FinalLeftSconce", new Vector3(-11.6f, 4.04f, 4.36f), new Vector3(0.34f, -0.92f, -0.18f), new Color(0.68f, 0.4f, 0.24f, 1f), 0.14f, 2.8f, 0.12f, 2.6f);
                 break;
         }
+    }
+
+    private void CreateRoomLightZoneEffect(Transform roomRoot, StandardRoomTemplate template, float roomStartX, float roomEndX, int roomIndex)
+    {
+        if (roomRoot == null)
+        {
+            return;
+        }
+
+        LightZoneEffect lightZone = roomRoot.GetComponent<LightZoneEffect>();
+        if (lightZone == null)
+        {
+            lightZone = roomRoot.gameObject.AddComponent<LightZoneEffect>();
+        }
+
+        lightZone.Configure(
+            new Vector2(roomStartX, roomEndX),
+            template.WalkDepth,
+            template.WallHeight,
+            GetRoomLightZoneLabel(roomIndex),
+            IsRoomLitByDefault(roomIndex));
+
+        _floorController?.RegisterRoomLightZone(roomIndex, lightZone);
+    }
+
+    private static void ConfigureMirrorRoomLighting(RoomLightingZone lightingZone, float roomStartX, float roomEndX, int roomIndex)
+    {
+        switch (roomIndex)
+        {
+            case LandingRoomIndex:
+                lightingZone.Configure(
+                    new Vector2(roomStartX, roomEndX),
+                    new Color(0.16f, 0.18f, 0.22f, 1f),
+                    0.18f,
+                    new Color(0.66f, 0.74f, 0.82f, 1f),
+                    0.08f,
+                    new Vector3(0.02f, -1f, -0.08f),
+                    new Color(0.82f, 0.86f, 0.92f, 1f),
+                    0.05f,
+                    0.68f,
+                    0.18f,
+                    new Color(0.02f, 0.024f, 0.03f, 1f),
+                    0.76f,
+                    new RoomLightingZone.LocalLightConfig(new Vector3(1.4f, 4.08f, 3.24f), new Color(0.72f, 0.78f, 0.88f, 1f), 0.62f, 6.8f),
+                    new RoomLightingZone.LocalLightConfig(new Vector3(-9.4f, 1.68f, 1.88f), new Color(0.52f, 0.6f, 0.72f, 1f), 0.32f, 3.1f));
+                break;
+            case RuleRoomIndex:
+                lightingZone.Configure(
+                    new Vector2(roomStartX, roomEndX),
+                    new Color(0.15f, 0.17f, 0.2f, 1f),
+                    0.16f,
+                    new Color(0.8f, 0.64f, 0.34f, 1f),
+                    0.08f,
+                    new Vector3(0.04f, -1f, -0.08f),
+                    new Color(0.9f, 0.82f, 0.64f, 1f),
+                    0.06f,
+                    0.7f,
+                    0.14f,
+                    new Color(0.022f, 0.024f, 0.028f, 1f),
+                    0.76f,
+                    new RoomLightingZone.LocalLightConfig(new Vector3(7.8f, 1.18f, 0.6f), new Color(1f, 0.64f, 0.26f, 1f), 1.78f, 6.2f),
+                    new RoomLightingZone.LocalLightConfig(new Vector3(-8.8f, 2.12f, 4.9f), new Color(0.6f, 0.66f, 0.78f, 1f), 0.22f, 2.8f));
+                break;
+            case PressureRoomIndex:
+                lightingZone.Configure(
+                    new Vector2(roomStartX, roomEndX),
+                    new Color(0.1f, 0.12f, 0.16f, 1f),
+                    0.18f,
+                    new Color(0.44f, 0.5f, 0.62f, 1f),
+                    0.1f,
+                    new Vector3(-0.08f, -0.99f, -0.06f),
+                    new Color(0.6f, 0.68f, 0.8f, 1f),
+                    0.06f,
+                    0.82f,
+                    0.1f,
+                    new Color(0.016f, 0.018f, 0.024f, 1f),
+                    0.86f,
+                    new RoomLightingZone.LocalLightConfig(new Vector3(-2.4f, 3.86f, 3.22f), new Color(0.42f, 0.5f, 0.62f, 1f), 0.58f, 9.8f),
+                    new RoomLightingZone.LocalLightConfig(new Vector3(5.8f, 3.74f, 3.34f), new Color(0.34f, 0.42f, 0.56f, 1f), 0.52f, 8.6f));
+                break;
+            case ChoiceRoomIndex:
+                lightingZone.Configure(
+                    new Vector2(roomStartX, roomEndX),
+                    new Color(0.14f, 0.16f, 0.18f, 1f),
+                    0.16f,
+                    new Color(0.72f, 0.68f, 0.56f, 1f),
+                    0.08f,
+                    new Vector3(0f, -1f, -0.08f),
+                    new Color(0.84f, 0.8f, 0.7f, 1f),
+                    0.05f,
+                    0.7f,
+                    0.14f,
+                    new Color(0.02f, 0.022f, 0.026f, 1f),
+                    0.78f,
+                    new RoomLightingZone.LocalLightConfig(new Vector3(0f, 2.12f, 0.82f), new Color(0.88f, 0.78f, 0.5f, 1f), 1.12f, 4.6f),
+                    new RoomLightingZone.LocalLightConfig(new Vector3(0f, 4.08f, 3.48f), new Color(0.62f, 0.7f, 0.82f, 1f), 0.42f, 5.4f));
+                break;
+            default:
+                lightingZone.Configure(
+                    new Vector2(roomStartX, roomEndX),
+                    new Color(0.12f, 0.14f, 0.18f, 1f),
+                    0.16f,
+                    new Color(0.84f, 0.72f, 0.44f, 1f),
+                    0.08f,
+                    new Vector3(0.06f, -0.99f, -0.06f),
+                    new Color(0.92f, 0.84f, 0.62f, 1f),
+                    0.06f,
+                    0.76f,
+                    0.12f,
+                    new Color(0.018f, 0.02f, 0.028f, 1f),
+                    0.84f,
+                    new RoomLightingZone.LocalLightConfig(new Vector3(7.4f, 1.18f, 0.6f), new Color(1f, 0.68f, 0.28f, 1f), 1.82f, 6f),
+                    new RoomLightingZone.LocalLightConfig(new Vector3(14.2f, 4.18f, 1.8f), new Color(0.88f, 0.82f, 0.58f, 1f), 0.52f, 5.2f));
+                break;
+        }
+    }
+
+    private static void CreateMirrorRoomLightRig(Transform lightRoot, int roomIndex)
+    {
+        switch (roomIndex)
+        {
+            case LandingRoomIndex:
+                CreatePendantRig(lightRoot, "MirrorPendant", new Vector3(1.4f, 4.08f, 3.24f), new Color(0.72f, 0.78f, 0.88f, 1f), 0.46f, 5.2f, new Color(0.78f, 0.84f, 0.92f, 1f), 0.74f, 6.2f);
+                break;
+            case RuleRoomIndex:
+                CreateDeskLampRig(lightRoot, "EtchingLamp", new Vector3(-8.8f, 2.12f, 4.9f), new Vector3(0.22f, -0.96f, -0.16f), new Color(0.58f, 0.64f, 0.76f, 1f), 0.18f, 2.4f, 0.24f, 2.8f);
+                break;
+            case PressureRoomIndex:
+                CreatePointLight(lightRoot, "PressureWash_A", new Vector3(-2.4f, 3.86f, 3.22f), new Color(0.42f, 0.5f, 0.62f, 1f), 0.44f, 10.2f, LightRenderMode.ForcePixel);
+                CreatePointLight(lightRoot, "PressureWash_B", new Vector3(5.8f, 3.74f, 3.34f), new Color(0.34f, 0.42f, 0.56f, 1f), 0.4f, 9.6f, LightRenderMode.ForcePixel);
+                break;
+            case ChoiceRoomIndex:
+                CreatePointLight(lightRoot, "MirrorHalo", new Vector3(0f, 2.12f, 0.82f), new Color(0.88f, 0.78f, 0.5f, 1f), 0.9f, 4.6f, LightRenderMode.ForcePixel);
+                break;
+            default:
+                CreatePendantRig(lightRoot, "ExitPendant", new Vector3(14.2f, 4.18f, 1.8f), new Color(0.88f, 0.82f, 0.58f, 1f), 0.42f, 4.6f, new Color(0.94f, 0.86f, 0.62f, 1f), 0.72f, 5.4f);
+                break;
+        }
+    }
+
+    private string GetRoomLightZoneLabel(int roomIndex)
+    {
+        if (_floorVariant == FloorVariant.MirrorCorridor)
+        {
+            switch (roomIndex)
+            {
+                case LandingRoomIndex:
+                    return "镜廊前厅";
+                case RuleRoomIndex:
+                    return "刻痕亮区";
+                case PressureRoomIndex:
+                    return "镜廊暗区";
+                case ChoiceRoomIndex:
+                    return "铜镜暗区";
+                default:
+                    return "终局镜门";
+            }
+        }
+
+        switch (roomIndex)
+        {
+            case LandingRoomIndex:
+                return "前厅亮区";
+            case RuleRoomIndex:
+                return "封印烛台";
+            case PressureRoomIndex:
+                return "压迫暗区";
+            case ChoiceRoomIndex:
+                return "抉择暗区";
+            default:
+                return "终局封印";
+        }
+    }
+
+    private bool IsRoomLitByDefault(int roomIndex)
+    {
+        return roomIndex == LandingRoomIndex;
     }
 
     private static void CreatePointLight(Transform parent, string name, Vector3 localPosition, Color color, float intensity, float range, LightRenderMode renderMode = LightRenderMode.Auto)
@@ -1064,11 +1512,13 @@ public sealed class TowerInteriorSlice : MonoBehaviour
         return width;
     }
 
-    private static StandardRoomTemplate CreateLivingRoomTemplate(string templateId)
+    private static StandardRoomTemplate[] GetTemplatesForFloor(FloorVariant floorVariant)
     {
-        float width = 42f;
-        float depth = 8.4f;
-        float wallHeight = 6.4f;
+        return floorVariant == FloorVariant.MirrorCorridor ? MirrorRoomTemplates : AshRoomTemplates;
+    }
+
+    private static StandardRoomTemplate CreateLivingRoomTemplate(string templateId, float width = 42f, float depth = 8.4f, float wallHeight = 6.4f)
+    {
         float floorThickness = 0.24f;
 
         return new StandardRoomTemplate(
@@ -1139,11 +1589,8 @@ public sealed class TowerInteriorSlice : MonoBehaviour
             });
     }
 
-    private static StandardRoomTemplate CreateStudyRoomTemplate(string templateId)
+    private static StandardRoomTemplate CreateStudyRoomTemplate(string templateId, float width = 42f, float depth = 8.4f, float wallHeight = 6.4f)
     {
-        float width = 42f;
-        float depth = 8.4f;
-        float wallHeight = 6.4f;
         float floorThickness = 0.24f;
 
         return new StandardRoomTemplate(

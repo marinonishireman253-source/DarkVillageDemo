@@ -45,12 +45,13 @@ public class TriggerZoneObjective : MonoBehaviour
 
     private void TryComplete(Collider other)
     {
+        GameStateHub gameStateHub = GameStateHub.Instance;
         if (_triggered && triggerOnce)
         {
             return;
         }
 
-        if (!completeOnPlayerEnter || QuestTracker.Instance == null)
+        if (!completeOnPlayerEnter || gameStateHub == null)
         {
             return;
         }
@@ -61,7 +62,7 @@ public class TriggerZoneObjective : MonoBehaviour
             return;
         }
 
-        bool completed = QuestTracker.Instance.CompleteObjective(objectiveId);
+        bool completed = gameStateHub.CompleteObjective(objectiveId);
         if (!completed)
         {
             return;

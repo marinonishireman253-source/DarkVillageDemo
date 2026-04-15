@@ -62,8 +62,8 @@ public class RuntimeDiagnostic : MonoBehaviour
         GameObject interiorRoot = GameObject.Find("__TowerInteriorSlice");
         _builder.AppendLine($"[Interior] root={(interiorRoot != null ? "present" : "missing")}");
 
-        QuestTracker tracker = QuestTracker.Instance;
-        _builder.AppendLine($"[Quest] current={(tracker != null ? tracker.CurrentObjectiveId : "tracker-missing")}");
+        GameStateHub gameStateHub = GameStateHub.Instance;
+        _builder.AppendLine($"[Quest] current={(gameStateHub != null ? gameStateHub.CurrentObjectiveId : "hub-missing")}");
 
         _builder.AppendLine($"[Input] keyboard={(Keyboard.current != null ? "available" : "null")}");
         if (Keyboard.current != null)
@@ -72,7 +72,7 @@ public class RuntimeDiagnostic : MonoBehaviour
         }
 
         _builder.AppendLine($"[Dialogue] simpleOpen={SimpleDialogueUI.IsOpen} runnerActive={DialogueRunner.IsActive}");
-        _builder.AppendLine($"[Systems] questTracker={(QuestTracker.Instance != null ? "present" : "missing")} dialogueRunner={(DialogueRunner.Instance != null ? "present" : "missing")} simpleDialogue={(SimpleDialogueUI.Instance != null ? "present" : "missing")}");
+        _builder.AppendLine($"[Systems] gameStateHub={(gameStateHub != null ? "present" : "missing")} dialogueRunner={(DialogueRunner.Instance != null ? "present" : "missing")} simpleDialogue={(SimpleDialogueUI.Instance != null ? "present" : "missing")}");
         _builder.AppendLine($"[Diagnosis] {BuildInteriorDiagnosis(player, mainCamera, follow, interiorRoot)}");
         return _builder.ToString().TrimEnd();
     }

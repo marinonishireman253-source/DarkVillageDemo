@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
@@ -19,6 +20,8 @@ public sealed class InventoryController : MonoBehaviour
 
     public static InventoryController Instance { get; private set; }
     public static bool IsOpen => Instance != null && Instance._isOpen;
+    public static event Action<WeaponData> OnWeaponEquipRequested;
+    public static event Action<bool> OnOpenStateChanged;
 
     private readonly List<InventoryItemCatalog.ItemViewData> _items = new List<InventoryItemCatalog.ItemViewData>();
 
@@ -26,6 +29,7 @@ public sealed class InventoryController : MonoBehaviour
     private int _selectedIndex;
     private float _previousTimeScale = 1f;
     private InventoryCanvasView.PanelTab _activeTab = InventoryCanvasView.PanelTab.Character;
+    private GameStateHub _gameStateHub;
 
     private void Awake()
     {
@@ -41,19 +45,28 @@ public sealed class InventoryController : MonoBehaviour
 
     private void OnEnable()
     {
-        ChapterState.OnCollectedItemsChanged += HandleCollectedItemsChanged;
+        PlayerCombat.OnWeaponEquipped += HandleWeaponEquipped;
+        GameStateHub.OnInstanceChanged += HandleGameStateHubChanged;
         SceneManager.sceneLoaded += HandleSceneLoaded;
+        BindGameStateHub(GameStateHub.Instance);
     }
 
     private void OnDisable()
     {
-        ChapterState.OnCollectedItemsChanged -= HandleCollectedItemsChanged;
+        PlayerCombat.OnWeaponEquipped -= HandleWeaponEquipped;
+        GameStateHub.OnInstanceChanged -= HandleGameStateHubChanged;
         SceneManager.sceneLoaded -= HandleSceneLoaded;
+        BindGameStateHub(null);
 
         if (Instance == this)
         {
             HideInventory();
         }
+    }
+
+    public static int GetCollectedItemCount()
+    {
+        return InventoryItemCatalog.GetCollectedItems().Count;
     }
 
     private void OnDestroy()
@@ -104,6 +117,12 @@ public sealed class InventoryController : MonoBehaviour
             if (navigation != 0)
             {
                 MoveSelection(navigation);
+                return;
+            }
+
+            if (ShouldEquipSelectedItemThisFrame())
+            {
+                TryEquipSelectedWeapon();
             }
         }
     }
@@ -127,7 +146,9 @@ public sealed class InventoryController : MonoBehaviour
     public static FloorCollectionSummary GetCurrentFloorCollectionSummary()
     {
         HashSet<string> collectedIds = new HashSet<string>();
-        string[] snapshot = ChapterState.GetCollectedItemsSnapshot();
+        string[] snapshot = GameStateHub.Instance != null
+            ? GameStateHub.Instance.GetCollectedItemSnapshot()
+            : System.Array.Empty<string>();
         for (int i = 0; i < snapshot.Length; i++)
         {
             if (string.IsNullOrWhiteSpace(snapshot[i]))
@@ -177,7 +198,7 @@ public sealed class InventoryController : MonoBehaviour
                 continue;
             }
 
-            if (ChapterState.HasItem(normalizedItemId))
+            if (GameStateHub.Instance != null && GameStateHub.Instance.HasCollectedItem(normalizedItemId))
             {
                 collectedCount++;
             }
@@ -188,11 +209,8 @@ public sealed class InventoryController : MonoBehaviour
 
     private bool CanOpen()
     {
-        return !SimpleDialogueUI.IsOpen
-            && !DialogueRunner.IsActive
-            && !AshParlorChoiceOverlay.IsVisible
-            && !FloorSummaryPanel.IsVisible
-            && !ChapterCompleteOverlay.IsVisible;
+        UiStateCoordinator coordinator = UiStateCoordinator.Instance;
+        return coordinator == null || UiStateCoordinator.AllowsInventoryForMode(coordinator.CurrentMode);
     }
 
     private void ShowInventory()
@@ -202,6 +220,7 @@ public sealed class InventoryController : MonoBehaviour
         _previousTimeScale = Time.timeScale;
         Time.timeScale = 0f;
         _isOpen = true;
+        OnOpenStateChanged?.Invoke(true);
         RefreshView();
     }
 
@@ -214,6 +233,7 @@ public sealed class InventoryController : MonoBehaviour
 
         _isOpen = false;
         Time.timeScale = _previousTimeScale;
+        OnOpenStateChanged?.Invoke(false);
 
         if (UiBootstrap.TryGetInventoryView(out InventoryCanvasView view))
         {
@@ -280,9 +300,52 @@ public sealed class InventoryController : MonoBehaviour
         }
     }
 
+    private void HandleWeaponEquipped(WeaponData weapon)
+    {
+        if (_isOpen)
+        {
+            RefreshView();
+        }
+    }
+
     private void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
     {
         HideInventory();
+    }
+
+    private void HandleGameStateHubChanged(GameStateHub hub)
+    {
+        BindGameStateHub(hub);
+    }
+
+    private void BindGameStateHub(GameStateHub hub)
+    {
+        if (_gameStateHub == hub)
+        {
+            return;
+        }
+
+        if (_gameStateHub != null)
+        {
+            _gameStateHub.OnCollectedItemsChanged -= HandleCollectedItemsChanged;
+            _gameStateHub.OnFlagChanged -= HandleHubFlagChanged;
+        }
+
+        _gameStateHub = hub;
+
+        if (_gameStateHub != null)
+        {
+            _gameStateHub.OnCollectedItemsChanged += HandleCollectedItemsChanged;
+            _gameStateHub.OnFlagChanged += HandleHubFlagChanged;
+        }
+    }
+
+    private void HandleHubFlagChanged(string flagId)
+    {
+        if (_isOpen)
+        {
+            RefreshView();
+        }
     }
 
     private static bool ShouldToggleThisFrame()
@@ -326,28 +389,30 @@ public sealed class InventoryController : MonoBehaviour
     {
         return _activeTab == InventoryCanvasView.PanelTab.Character
             ? "A/D 或 ←/→ 切换页签    1/2 直达页签    Tab / I 关闭    Esc 返回"
-            : "A/D 或 ←/→ 切换页签    1/2 直达页签    W/S 或 ↑/↓ 切换物品    Tab / I 关闭    Esc 返回";
+            : CanEquipSelectedWeapon()
+                ? "A/D 或 ←/→ 切换页签    1/2 直达页签    W/S 或 ↑/↓ 切换物品    E / Enter 装备    Tab / I 关闭    Esc 返回"
+                : "A/D 或 ←/→ 切换页签    1/2 直达页签    W/S 或 ↑/↓ 切换物品    Tab / I 关闭    Esc 返回";
     }
 
     private InventoryCanvasView.CharacterProfileData BuildCharacterProfileData()
     {
-        PlayerCombat playerCombat = FindFirstObjectByType<PlayerCombat>();
-        QuestTracker tracker = QuestTracker.Instance != null ? QuestTracker.Instance : FindFirstObjectByType<QuestTracker>();
+        PlayerCombat playerCombat = PlayerCombat.LocalInstance;
+        GameStateHub gameStateHub = GameStateHub.Instance;
 
         string healthLine = playerCombat != null && playerCombat.Health != null
             ? $"生命值 {playerCombat.Health.CurrentHealth}/{playerCombat.Health.MaxHealth}"
             : "生命值 未知";
         string combatLine = playerCombat != null
-            ? $"近战伤害 {playerCombat.AttackDamage}    攻击间隔 {playerCombat.AttackCooldown:0.00}s"
+            ? $"当前武器 {(playerCombat.EquippedWeapon != null ? playerCombat.EquippedWeapon.WeaponName : "徒手")}    近战伤害 {playerCombat.AttackDamage}    攻击范围 {playerCombat.AttackRange:0.0}    攻击间隔 {playerCombat.AttackCooldown:0.00}s"
             : "近战数据 暂无";
-        string objectiveLine = tracker != null && !string.IsNullOrWhiteSpace(tracker.CurrentObjectiveText)
-            ? tracker.CurrentObjectiveText
+        string objectiveLine = gameStateHub != null && !string.IsNullOrWhiteSpace(gameStateHub.CurrentObjective)
+            ? gameStateHub.CurrentObjective
             : "暂无当前目标，先继续探索这层空间。";
         string stateLine = CombatEncounterTrigger.ActiveEncounter != null ? "战斗中" : "探索中";
-        string lastCompleteLine = tracker != null && !string.IsNullOrWhiteSpace(tracker.LastCompletedObjectiveText)
-            ? tracker.LastCompletedObjectiveText
+        string lastCompleteLine = gameStateHub != null && !string.IsNullOrWhiteSpace(gameStateHub.LastCompletedObjective)
+            ? gameStateHub.LastCompletedObjective
             : "暂无已完成记录";
-        string chapterCompleteLine = ChapterState.GetFlag("chapter01_complete") ? "是" : "否";
+        string chapterCompleteLine = gameStateHub != null && gameStateHub.GetChapterFlag("chapter01_complete") == "true" ? "是" : "否";
         string explorationNotes =
             $"当前状态：{stateLine}\n" +
             $"已收集物件：{_items.Count} 件\n" +
@@ -441,5 +506,35 @@ public sealed class InventoryController : MonoBehaviour
         }
 
         return 0;
+    }
+
+    private void TryEquipSelectedWeapon()
+    {
+        if (!CanEquipSelectedWeapon())
+        {
+            return;
+        }
+
+        OnWeaponEquipRequested?.Invoke(_items[_selectedIndex].Weapon);
+    }
+
+    private bool CanEquipSelectedWeapon()
+    {
+        return _activeTab == InventoryCanvasView.PanelTab.Inventory
+            && _items.Count > 0
+            && _selectedIndex >= 0
+            && _selectedIndex < _items.Count
+            && _items[_selectedIndex].Weapon != null;
+    }
+
+    private static bool ShouldEquipSelectedItemThisFrame()
+    {
+        if (Keyboard.current != null
+            && (Keyboard.current.eKey.wasPressedThisFrame || Keyboard.current.enterKey.wasPressedThisFrame))
+        {
+            return true;
+        }
+
+        return Gamepad.current != null && Gamepad.current.buttonSouth.wasPressedThisFrame;
     }
 }

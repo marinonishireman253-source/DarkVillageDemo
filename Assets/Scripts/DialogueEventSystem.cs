@@ -70,14 +70,13 @@ public static class DialogueEventSystem
 
     private static void HandleTriggerQuest(DialogueEvent evt)
     {
-        QuestTracker tracker = QuestTracker.Instance;
-        if (tracker == null)
+        if (GameStateHub.Instance == null)
         {
-            Debug.LogWarning("[DialogueEvent] QuestTracker not found");
+            Debug.LogWarning("[DialogueEvent] GameStateHub not found");
             return;
         }
 
-        tracker.CompleteObjective(evt.Id);
+        GameStateHub.Instance.CompleteObjective(evt.Id);
     }
 
     private static readonly Dictionary<string, bool> _flags = new Dictionary<string, bool>();

@@ -2,7 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public sealed class AshParlorRunController : MonoBehaviour
+public sealed class AshParlorRunController : FloorRunController
 {
     public enum FloorSummaryTestPreset
     {
@@ -15,6 +15,7 @@ public sealed class AshParlorRunController : MonoBehaviour
     private const string ChoiceObjectiveId = "ash_parlor_choice";
     private const string SecondBrazierObjectiveId = "ash_parlor_second_brazier";
     private const string ExitObjectiveId = "ash_parlor_exit";
+    private const string ExitUnlockedFlagValue = "ash_parlor_exit_unlocked";
     private const string FloorSummaryTitle = "—— 灰烬客厅 · 通过 ——";
     private const string RiskChoiceLabel = "选择了风险之路";
     private const string SafeChoiceLabel = "选择了安全之路";
@@ -84,6 +85,7 @@ public sealed class AshParlorRunController : MonoBehaviour
     private readonly bool[] _roomBoundsRegistered = new bool[RoomCount];
     private readonly bool[] _roomBeatPlayed = new bool[RoomCount];
     private readonly HashSet<string> _floorCollectibleIds = new HashSet<string>();
+    private readonly LightZoneEffect[] _roomLightZones = new LightZoneEffect[RoomCount];
 
     private AshParlorBrazierInteractable _firstBrazier;
     private AshParlorBrazierInteractable _secondBrazier;
@@ -109,7 +111,9 @@ public sealed class AshParlorRunController : MonoBehaviour
     private bool _pressureWarningStarted;
     private ChapterState.ChoiceResult _choiceState;
 
-    public void RegisterRoomBounds(int roomIndex, float startX, float endX)
+    public override string ExitUnlockedFlagId => ExitUnlockedFlagValue;
+
+    public override void RegisterRoomBounds(int roomIndex, float startX, float endX)
     {
         if (roomIndex < 0 || roomIndex >= RoomCount)
         {
@@ -120,17 +124,39 @@ public sealed class AshParlorRunController : MonoBehaviour
         _roomBoundsRegistered[roomIndex] = true;
     }
 
-    public void RegisterFirstBrazier(AshParlorBrazierInteractable brazier)
+    public override void RegisterRoomLightZone(int roomIndex, LightZoneEffect lightZone)
+    {
+        if (roomIndex < 0 || roomIndex >= RoomCount)
+        {
+            return;
+        }
+
+        _roomLightZones[roomIndex] = lightZone;
+
+        if (lightZone == null)
+        {
+            return;
+        }
+
+        bool shouldBeLit = roomIndex == 0
+            || (roomIndex == 1 && _firstBrazier != null && _firstBrazier.IsLit)
+            || (roomIndex == 4 && _secondBrazier != null && _secondBrazier.IsLit);
+        lightZone.SetLit(shouldBeLit);
+    }
+
+    public override void RegisterFirstBrazier(AshParlorBrazierInteractable brazier)
     {
         _firstBrazier = brazier;
+        SetRoomLightZoneLit(1, brazier != null && brazier.IsLit);
     }
 
-    public void RegisterSecondBrazier(AshParlorBrazierInteractable brazier)
+    public override void RegisterSecondBrazier(AshParlorBrazierInteractable brazier)
     {
         _secondBrazier = brazier;
+        SetRoomLightZoneLit(4, brazier != null && brazier.IsLit);
     }
 
-    public void RegisterChoicePair(
+    public override void RegisterChoicePair(
         AshParlorChoiceInteractable riskyChoice,
         AshParlorChoiceInteractable safeChoice,
         AshParlorChoicePromptInteractable choicePrompt,
@@ -142,25 +168,25 @@ public sealed class AshParlorRunController : MonoBehaviour
         _choiceAnchor = choiceAnchor;
     }
 
-    public void RegisterExit(AshParlorExitInteractable exitInteractable)
+    public override void RegisterExit(AshParlorExitInteractable exitInteractable)
     {
         _exit = exitInteractable;
-        _exit?.SetUnlocked(false);
+        SetExitUnlocked(false);
     }
 
-    public void RegisterPressureSeal(AshParlorSealBarrier barrier)
+    public override void RegisterPressureSeal(AshParlorSealBarrier barrier)
     {
         _pressureSeal = barrier;
         _pressureSeal?.SetLocked(true);
     }
 
-    public void RegisterFinaleSeal(AshParlorSealBarrier barrier)
+    public override void RegisterFinaleSeal(AshParlorSealBarrier barrier)
     {
         _finaleSeal = barrier;
         _finaleSeal?.SetLocked(true);
     }
 
-    public void RegisterPressureEnemy(SimpleEnemyController enemy)
+    public override void RegisterPressureEnemy(SimpleEnemyController enemy)
     {
         _pressureEnemy = enemy;
         if (_pressureEnemy == null)
@@ -173,19 +199,19 @@ public sealed class AshParlorRunController : MonoBehaviour
         _pressureEnemy.gameObject.SetActive(false);
     }
 
-    public void RegisterPressureRoomLights(Light[] lights)
+    public override void RegisterPressureRoomLights(Light[] lights)
     {
         _pressureRoomLights = lights ?? System.Array.Empty<Light>();
     }
 
-    public void RegisterFinalEnemy(SimpleEnemyController enemy)
+    public override void RegisterFinalEnemy(SimpleEnemyController enemy)
     {
         _finalEnemy = enemy;
         _finalEnemy?.SetEncounterEnabled(false);
         _finalEnemy?.SetEncounterProfile(finalEnemyBaseSpeed, finalEnemyBaseRange, finalEnemyBaseCooldown);
     }
 
-    public void RegisterRiskBonusEnemy(SimpleEnemyController enemy)
+    public override void RegisterRiskBonusEnemy(SimpleEnemyController enemy)
     {
         _riskBonusEnemy = enemy;
         if (_riskBonusEnemy == null)
@@ -198,7 +224,7 @@ public sealed class AshParlorRunController : MonoBehaviour
         _riskBonusEnemy.gameObject.SetActive(false);
     }
 
-    public void RegisterRiskRewardPickup(PickupInteractable pickup)
+    public override void RegisterRiskRewardPickup(PickupInteractable pickup)
     {
         _riskRewardPickup = pickup;
         if (_riskRewardPickup != null && !string.IsNullOrWhiteSpace(_riskRewardPickup.ItemId))
@@ -211,6 +237,7 @@ public sealed class AshParlorRunController : MonoBehaviour
 
     public void PrepareFloorSummaryTest(FloorSummaryTestPreset preset, PlayerMover player)
     {
+        GameStateHub gameStateHub = GameStateHub.Instance;
         ChapterState.ChoiceResult choiceResult = preset == FloorSummaryTestPreset.RiskSummary
             ? ChapterState.ChoiceResult.Risk
             : ChapterState.ChoiceResult.Safe;
@@ -223,7 +250,7 @@ public sealed class AshParlorRunController : MonoBehaviour
             summaryPanel.Hide();
         }
 
-        ChapterState.ResetRuntime();
+        gameStateHub?.ResetRuntimeState();
         DialogueEventSystem.ClearFlags();
 
         _completionSequenceStarted = false;
@@ -234,17 +261,22 @@ public sealed class AshParlorRunController : MonoBehaviour
 
         _firstBrazier?.SetLit(true);
         _secondBrazier?.SetLit(true);
+        SetRoomLightZoneLit(1, true);
+        SetRoomLightZoneLit(4, true);
         _pressureSeal?.SetLocked(false);
         _finaleSeal?.SetLocked(false);
-        _exit?.SetUnlocked(true);
+        SetExitUnlocked(true);
 
         _choiceState = choiceResult;
-        ChapterState.SetChoiceResult(choiceResult);
+        if (gameStateHub != null)
+        {
+            gameStateHub.CurrentChoiceResult = choiceResult;
+        }
         ApplyChoiceConsequences(false);
 
         if (collectReward && _riskRewardPickup != null && !string.IsNullOrWhiteSpace(_riskRewardPickup.ItemId))
         {
-            ChapterState.CollectItem(_riskRewardPickup.ItemId);
+            gameStateHub?.CollectItem(_riskRewardPickup.ItemId);
             _riskRewardPickup.RefreshFromRuntimeState();
         }
         else
@@ -267,8 +299,9 @@ public sealed class AshParlorRunController : MonoBehaviour
         UpdateRoomBeats();
     }
 
-    public bool TryLightBrazier(AshParlorBrazierInteractable brazier, PlayerMover player)
+    public override bool TryLightBrazier(AshParlorBrazierInteractable brazier, PlayerMover player)
     {
+        GameStateHub gameStateHub = GameStateHub.Instance;
         if (brazier == null || _completionSequenceStarted)
         {
             return false;
@@ -284,7 +317,8 @@ public sealed class AshParlorRunController : MonoBehaviour
 
             _litBraziers = 1;
             brazier.SetLit(true);
-            QuestTracker.Instance?.CompleteObjective(FirstBrazierObjectiveId);
+            SetRoomLightZoneLit(1, true);
+            gameStateHub?.CompleteObjective(FirstBrazierObjectiveId);
             _pressureSeal?.SetLocked(false);
             RefreshObjective(true);
             return true;
@@ -306,8 +340,9 @@ public sealed class AshParlorRunController : MonoBehaviour
 
             _litBraziers = 2;
             brazier.SetLit(true);
-            _exit?.SetUnlocked(true);
-            QuestTracker.Instance?.CompleteObjective(SecondBrazierObjectiveId);
+            SetRoomLightZoneLit(4, true);
+            SetExitUnlocked(true);
+            gameStateHub?.CompleteObjective(SecondBrazierObjectiveId);
             StartCoroutine(PlayFinaleFeedback(brazier.transform.position + finaleBurstOffset));
 
             if (_pressureEnemy != null)
@@ -324,7 +359,7 @@ public sealed class AshParlorRunController : MonoBehaviour
         return false;
     }
 
-    public void TryOpenChoicePrompt(PlayerMover player)
+    public override void TryOpenChoicePrompt(PlayerMover player)
     {
         if (_completionSequenceStarted)
         {
@@ -346,7 +381,7 @@ public sealed class AshParlorRunController : MonoBehaviour
         AshParlorChoiceOverlay.Instance?.Show(this, player);
     }
 
-    public bool TryResolveChoice(AshParlorChoiceInteractable.ChoiceKind choiceKind, PlayerMover player)
+    public override bool TryResolveChoice(AshParlorChoiceInteractable.ChoiceKind choiceKind, PlayerMover player)
     {
         if (_completionSequenceStarted || _choiceState != ChapterState.ChoiceResult.None)
         {
@@ -356,14 +391,17 @@ public sealed class AshParlorRunController : MonoBehaviour
         _choiceState = choiceKind == AshParlorChoiceInteractable.ChoiceKind.Risky
             ? ChapterState.ChoiceResult.Risk
             : ChapterState.ChoiceResult.Safe;
-        ChapterState.SetChoiceResult(_choiceState);
+        if (GameStateHub.Instance != null)
+        {
+            GameStateHub.Instance.CurrentChoiceResult = _choiceState;
+        }
         ApplyChoiceConsequences(true);
 
         RefreshObjective(true);
         return true;
     }
 
-    public void TryUseExit(PlayerMover player)
+    public override void TryUseExit(PlayerMover player)
     {
         if (_completionSequenceStarted)
         {
@@ -378,7 +416,7 @@ public sealed class AshParlorRunController : MonoBehaviour
 
         _completionSequenceStarted = true;
         RewardPlayer(player);
-        QuestTracker.Instance?.CompleteObjective(ExitObjectiveId);
+        GameStateHub.Instance?.CompleteObjective(ExitObjectiveId);
         ShowFloorSummary();
     }
 
@@ -455,7 +493,8 @@ public sealed class AshParlorRunController : MonoBehaviour
 
     private void RefreshObjective(bool force = false)
     {
-        if (_completionSequenceStarted || QuestTracker.Instance == null)
+        GameStateHub gameStateHub = GameStateHub.Instance;
+        if (_completionSequenceStarted || gameStateHub == null)
         {
             return;
         }
@@ -495,14 +534,14 @@ public sealed class AshParlorRunController : MonoBehaviour
         }
 
         if (!force
-            && QuestTracker.Instance.CurrentObjectiveId == desiredId
-            && QuestTracker.Instance.CurrentTarget == desiredTarget
-            && !QuestTracker.Instance.IsCompleted)
+            && gameStateHub.CurrentObjectiveId == desiredId
+            && gameStateHub.CurrentObjectiveTarget == desiredTarget
+            && !gameStateHub.IsCurrentObjectiveCompleted)
         {
             return;
         }
 
-        QuestTracker.Instance.SetObjective(desiredId, desiredText, desiredTarget, desiredMarker);
+        gameStateHub.SetObjective(desiredId, desiredText, desiredTarget, desiredMarker);
     }
 
     private void RewardPlayer(PlayerMover player)
@@ -519,7 +558,9 @@ public sealed class AshParlorRunController : MonoBehaviour
 
     private void SynchronizeChoiceState()
     {
-        ChapterState.ChoiceResult storedChoice = ChapterState.CurrentChoiceResult;
+        ChapterState.ChoiceResult storedChoice = GameStateHub.Instance != null
+            ? GameStateHub.Instance.CurrentChoiceResult
+            : ChapterState.ChoiceResult.None;
         if (storedChoice == ChapterState.ChoiceResult.None || storedChoice == _choiceState)
         {
             return;
@@ -534,7 +575,7 @@ public sealed class AshParlorRunController : MonoBehaviour
         _riskyChoice?.SetResolved(true);
         _safeChoice?.SetResolved(true);
         _finaleSeal?.SetLocked(false);
-        QuestTracker.Instance?.CompleteObjective(ChoiceObjectiveId);
+        GameStateHub.Instance?.CompleteObjective(ChoiceObjectiveId);
 
         ApplyFinalEncounterProfile();
         SetRiskBonusEnemyActive(_choiceState == ChapterState.ChoiceResult.Risk);
@@ -563,52 +604,37 @@ public sealed class AshParlorRunController : MonoBehaviour
 
     private void ShowFloorSummary()
     {
-        InventoryController.FloorCollectionSummary collectionSummary = InventoryController.GetCurrentFloorCollectionSummary(_floorCollectibleIds);
-        ChapterState.ChoiceResult choiceResult = ChapterState.CurrentChoiceResult != ChapterState.ChoiceResult.None
-            ? ChapterState.CurrentChoiceResult
-            : _choiceState;
-        string choiceLine;
-        string narrativeLine;
-
-        switch (choiceResult)
-        {
-            case ChapterState.ChoiceResult.Risk:
-                choiceLine = RiskChoiceLabel;
-                narrativeLine = RiskNarrative;
-                break;
-            case ChapterState.ChoiceResult.Safe:
-                choiceLine = SafeChoiceLabel;
-                narrativeLine = SafeNarrative;
-                break;
-            default:
-                choiceLine = "尚未留下明确的选择记录";
-                narrativeLine = "这一层已经结束，但它留下的重量还没有名字。";
-                break;
-        }
-
-        if (UiBootstrap.TryGetFloorSummaryView(out FloorSummaryPanel summaryPanel))
-        {
-            Time.timeScale = 0f;
-            summaryPanel.Show(
-                new FloorSummaryPanel.SummaryData(
-                    FloorSummaryTitle,
-                    $"{collectionSummary.CollectedCount} / {collectionSummary.TotalCollectibleCount}",
-                    choiceLine,
-                    narrativeLine,
-                    "继续"),
-                ContinueFromFloorSummary);
-            return;
-        }
-
-        ContinueFromFloorSummary();
+        ShowFloorSummary(
+            BuildSummaryData(
+                FloorSummaryTitle,
+                _floorCollectibleIds,
+                RiskChoiceLabel,
+                SafeChoiceLabel,
+                RiskNarrative,
+                SafeNarrative,
+                "继续"),
+            ContinueFromFloorSummary);
     }
 
     private void ContinueFromFloorSummary()
     {
-        Time.timeScale = 1f;
-        ChapterState.ResetRuntime();
-        DialogueEventSystem.ClearFlags();
-        SceneLoader.ReloadCurrent();
+        ContinueToFloor(1);
+    }
+
+    private void SetExitUnlocked(bool unlocked)
+    {
+        _exit?.SetUnlocked(unlocked);
+        GameStateHub.Instance?.SetChapterFlag(ExitUnlockedFlagValue, unlocked ? "true" : "false");
+    }
+
+    private void SetRoomLightZoneLit(int roomIndex, bool isLit)
+    {
+        if (roomIndex < 0 || roomIndex >= _roomLightZones.Length)
+        {
+            return;
+        }
+
+        _roomLightZones[roomIndex]?.SetLit(isLit);
     }
 
     private void DisableEnemyForTest(SimpleEnemyController enemy)
@@ -1008,7 +1034,19 @@ public sealed class AshParlorRunController : MonoBehaviour
         RenderSettings.ambientIntensity = targetIntensity;
     }
 
-    private static void ShowLines(string speaker, params string[] lines)
+    public override ChoiceOverlayConfig GetChoiceOverlayConfig()
+    {
+        return new ChoiceOverlayConfig(
+            "选择房分支",
+            "前方的路断成两条。直接在下面两个按钮里选一条路。",
+            "A / ← / 1 与 D / → / 2 切换    Enter / E 确认    Esc 返回",
+            "风险",
+            "走向低吼\n终局更危险，但可获得线索结晶。",
+            "保守",
+            "走向沉寂\n终局更平稳，但不会获得额外线索。");
+    }
+
+    private static new void ShowLines(string speaker, params string[] lines)
     {
         if (SimpleDialogueUI.Instance == null)
         {

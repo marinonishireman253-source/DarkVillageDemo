@@ -1,0 +1,18 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0c95bdce3e23a48e19927df5e8862747, type: 3}
+  m_Name: CorePrefabCatalog
+  m_EditorClassIdentifier: Assembly-CSharp::CorePrefabCatalog
+  playerPrefab: {fileID: 5242852388736538687, guid: 1f211f0f599784d49a32176d67f00396, type: 3}
+  standardEnemyPrefab: {fileID: 1803764620680571338, guid: 27574999a9aa94d6ab659b2a693277b7, type: 3}
+  interactionPromptPrefab: {fileID: 8447388778529398611, guid: 480b923c0ba564d94b6abb18e2a633f6, type: 3}
+  brazierPrefab: {fileID: 135369481347273513, guid: 01b356e35cbaa49b3b86d77204d60482, type: 3}

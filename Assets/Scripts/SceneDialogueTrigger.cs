@@ -110,6 +110,7 @@ public class SceneDialogueTrigger : MonoBehaviour
 
     private void TryTrigger(Collider other)
     {
+        GameStateHub gameStateHub = GameStateHub.Instance;
         if (_triggered && triggerOnce)
         {
             return;
@@ -120,9 +121,9 @@ public class SceneDialogueTrigger : MonoBehaviour
             return;
         }
 
-        bool missingItem = !string.IsNullOrWhiteSpace(requiredItemId) && !ChapterState.HasItem(requiredItemId);
+        bool missingItem = !string.IsNullOrWhiteSpace(requiredItemId) && (gameStateHub == null || !gameStateHub.HasCollectedItem(requiredItemId));
         bool wrongObjective = !string.IsNullOrWhiteSpace(requiredObjectiveId)
-            && (QuestTracker.Instance == null || QuestTracker.Instance.CurrentObjectiveId != requiredObjectiveId);
+            && (gameStateHub == null || !gameStateHub.IsCurrentObjective(requiredObjectiveId));
         if (missingItem || wrongObjective)
         {
             if (SimpleDialogueUI.Instance != null && !SimpleDialogueUI.IsOpen)
@@ -136,7 +137,7 @@ public class SceneDialogueTrigger : MonoBehaviour
 
         if (!string.IsNullOrWhiteSpace(flagId))
         {
-            ChapterState.SetFlag(flagId, true);
+            gameStateHub?.SetChapterFlag(flagId, "true");
         }
 
         if (SimpleDialogueUI.Instance != null && !SimpleDialogueUI.IsOpen)

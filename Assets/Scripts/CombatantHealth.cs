@@ -8,6 +8,7 @@ public class CombatantHealth : MonoBehaviour
     public int CurrentHealth { get; private set; }
     public bool IsDead => CurrentHealth <= 0;
 
+    public event System.Action<CombatantHealth> OnHealthChanged;
     public event System.Action<CombatantHealth, int> OnDamaged;
     public event System.Action<CombatantHealth> OnDied;
 
@@ -25,13 +26,15 @@ public class CombatantHealth : MonoBehaviour
     public void RestoreFull()
     {
         CurrentHealth = Mathf.Max(1, maxHealth);
-        SaveSystem.MarkDirty();
+        GameStateHub.MarkRuntimeStateDirty();
+        OnHealthChanged?.Invoke(this);
     }
 
     public void RestoreTo(int currentHealth)
     {
         CurrentHealth = Mathf.Clamp(currentHealth, 1, maxHealth);
-        SaveSystem.MarkDirty();
+        GameStateHub.MarkRuntimeStateDirty();
+        OnHealthChanged?.Invoke(this);
     }
 
     public bool TakeDamage(int amount)
@@ -43,7 +46,8 @@ public class CombatantHealth : MonoBehaviour
 
         int damage = Mathf.Max(1, amount);
         CurrentHealth = Mathf.Max(0, CurrentHealth - damage);
-        SaveSystem.MarkDirty();
+        GameStateHub.MarkRuntimeStateDirty();
+        OnHealthChanged?.Invoke(this);
         OnDamaged?.Invoke(this, damage);
 
         if (CurrentHealth > 0)

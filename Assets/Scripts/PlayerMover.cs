@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -10,6 +11,9 @@ public class PlayerMover : MonoBehaviour
         GroundPlaneXZ,
         SideScrollerX
     }
+
+    public static PlayerMover LocalInstance { get; private set; }
+    public static event Action<PlayerMover> OnLocalInstanceChanged;
 
     [Header("Movement")]
     [SerializeField] private float walkSpeed = 4.2f;
@@ -37,8 +41,10 @@ public class PlayerMover : MonoBehaviour
     public Vector3 ExternalVelocity => _externalVelocity;
     public bool HasInteractableTarget => _currentInteractable != null;
     public IInteractable CurrentInteractable => _currentInteractable;
-    public bool IsSprintActive => !SimpleDialogueUI.IsOpen && !InventoryController.IsOpen && !AshParlorChoiceOverlay.IsVisible && !FloorSummaryPanel.IsVisible && IsSprinting() && _moveInput.sqrMagnitude > 0.0001f;
+    public bool IsSprintActive => !UiStateCoordinator.BlocksPlayerMovementForMode(_currentUiMode) && IsSprinting() && _moveInput.sqrMagnitude > 0.0001f;
     public bool IsControlLocked => Time.time < _controlLockedUntil;
+
+    public event Action<PlayerMover, IInteractable> OnInteractableTargetChanged;
 
     private InputAction _moveAction;
     private InputAction _sprintAction;
@@ -58,6 +64,25 @@ public class PlayerMover : MonoBehaviour
     private Vector3 _externalVelocity;
     private float _controlLockedUntil;
     private float _speedMultiplier = 1f;
+    private float _lightZoneSprintMultiplier = 1f;
+    private float _lightZoneInteractionMultiplier = 1f;
+    private UiStateCoordinator _stateCoordinator;
+    private UiStateCoordinator.UiMode _currentUiMode = UiStateCoordinator.UiMode.Exploration;
+
+    private void Awake()
+    {
+        LocalInstance = this;
+        OnLocalInstanceChanged?.Invoke(this);
+    }
+
+    private void OnDestroy()
+    {
+        if (LocalInstance == this)
+        {
+            LocalInstance = null;
+            OnLocalInstanceChanged?.Invoke(null);
+        }
+    }
 
     public void ConfigureGroundPlane()
     {
@@ -118,6 +143,24 @@ public class PlayerMover : MonoBehaviour
         _speedMultiplier = 1f;
     }
 
+    public void SetLightZoneSprintMultiplier(float multiplier)
+    {
+        _lightZoneSprintMultiplier = Mathf.Clamp(multiplier, 0.25f, 2f);
+    }
+
+    public void SetLightZoneInteractionMultiplier(float multiplier)
+    {
+        _lightZoneInteractionMultiplier = Mathf.Clamp(multiplier, 0.25f, 2f);
+        UpdateInteractionTarget();
+    }
+
+    public void ResetLightZoneMultipliers()
+    {
+        _lightZoneSprintMultiplier = 1f;
+        _lightZoneInteractionMultiplier = 1f;
+        UpdateInteractionTarget();
+    }
+
     public void LockControls(float duration)
     {
         _controlLockedUntil = Mathf.Max(_controlLockedUntil, Time.time + Mathf.Max(0f, duration));
@@ -125,12 +168,16 @@ public class PlayerMover : MonoBehaviour
 
     private void OnEnable()
     {
+        UiStateCoordinator.OnInstanceChanged += HandleStateCoordinatorChanged;
+        BindStateCoordinator(UiStateCoordinator.Instance);
         BindInput();
         EnableActions();
     }
 
     private void OnDisable()
     {
+        UiStateCoordinator.OnInstanceChanged -= HandleStateCoordinatorChanged;
+        BindStateCoordinator(null);
         DisableActions();
         UnbindInput();
     }
@@ -148,7 +195,7 @@ public class PlayerMover : MonoBehaviour
 
         RefreshMoveInput();
 
-        if (InventoryController.IsOpen || AshParlorChoiceOverlay.IsVisible || FloorSummaryPanel.IsVisible)
+        if (UiStateCoordinator.BlocksPlayerMovementForMode(_currentUiMode))
         {
             ClearInteractionTarget();
             _currentVelocity = Vector3.zero;
@@ -164,11 +211,39 @@ public class PlayerMover : MonoBehaviour
 
     private bool ShouldBlockInteractionInput()
     {
-        return SimpleDialogueUI.IsOpen
-            || InventoryController.IsOpen
-            || AshParlorChoiceOverlay.IsVisible
-            || FloorSummaryPanel.IsVisible
+        return UiStateCoordinator.BlocksPlayerInteractionForMode(_currentUiMode)
             || Time.frameCount <= SimpleDialogueUI.LastClosedFrame;
+    }
+
+    private void HandleStateCoordinatorChanged(UiStateCoordinator stateCoordinator)
+    {
+        BindStateCoordinator(stateCoordinator);
+    }
+
+    private void HandleUiModeChanged(UiStateCoordinator.UiMode mode)
+    {
+        _currentUiMode = mode;
+    }
+
+    private void BindStateCoordinator(UiStateCoordinator stateCoordinator)
+    {
+        if (_stateCoordinator == stateCoordinator)
+        {
+            return;
+        }
+
+        if (_stateCoordinator != null)
+        {
+            _stateCoordinator.OnModeChanged -= HandleUiModeChanged;
+        }
+
+        _stateCoordinator = stateCoordinator;
+        _currentUiMode = _stateCoordinator != null ? _stateCoordinator.CurrentMode : UiStateCoordinator.UiMode.Exploration;
+
+        if (_stateCoordinator != null)
+        {
+            _stateCoordinator.OnModeChanged += HandleUiModeChanged;
+        }
     }
 
     private void BindInput()
@@ -246,7 +321,7 @@ public class PlayerMover : MonoBehaviour
 
     private void UpdateMovement(float deltaTime)
     {
-        if (SimpleDialogueUI.IsOpen || AshParlorChoiceOverlay.IsVisible || FloorSummaryPanel.IsVisible)
+        if (UiStateCoordinator.BlocksPlayerMovementForMode(_currentUiMode))
         {
             _currentVelocity = Vector3.zero;
             _externalVelocity = Vector3.zero;
@@ -255,7 +330,8 @@ public class PlayerMover : MonoBehaviour
 
         Vector3 desiredDirection = IsControlLocked ? Vector3.zero : GetDesiredDirection();
 
-        float targetSpeed = (IsSprinting() ? sprintSpeed : walkSpeed) * _speedMultiplier;
+        float movementSpeed = IsSprinting() ? sprintSpeed * _lightZoneSprintMultiplier : walkSpeed;
+        float targetSpeed = movementSpeed * _speedMultiplier;
         Vector3 targetVelocity = desiredDirection * targetSpeed;
 
         float rate = desiredDirection.sqrMagnitude > 0.0001f ? acceleration : deceleration;
@@ -349,7 +425,8 @@ public class PlayerMover : MonoBehaviour
     private void UpdateInteractionTarget()
     {
         Vector3 origin = transform.position + transform.rotation * interactionOffset;
-        Collider[] hits = Physics.OverlapSphere(origin, interactionRadius, interactionMask, QueryTriggerInteraction.Collide);
+        float currentInteractionRadius = interactionRadius * _lightZoneInteractionMultiplier;
+        Collider[] hits = Physics.OverlapSphere(origin, currentInteractionRadius, interactionMask, QueryTriggerInteraction.Collide);
 
         IInteractable best = null;
         float bestScore = float.NegativeInfinity;
@@ -362,7 +439,7 @@ public class PlayerMover : MonoBehaviour
                 continue;
             }
 
-            if (interactable is Object unityObject && !unityObject)
+            if (interactable is UnityEngine.Object unityObject && !unityObject)
             {
                 continue;
             }
@@ -381,9 +458,7 @@ public class PlayerMover : MonoBehaviour
 
         if (!ReferenceEquals(best, _currentInteractable))
         {
-            ClearInteractionTarget();
-            _currentInteractable = best;
-            _currentInteractable?.OnFocusGained(this);
+            SetInteractionTarget(best);
         }
     }
 
@@ -461,13 +536,22 @@ public class PlayerMover : MonoBehaviour
 
     private void ClearInteractionTarget()
     {
-        if (_currentInteractable == null)
+        SetInteractionTarget(null);
+    }
+
+    private void SetInteractionTarget(IInteractable nextInteractable)
+    {
+        if (ReferenceEquals(_currentInteractable, nextInteractable))
         {
             return;
         }
 
-        _currentInteractable.OnFocusLost(this);
-        _currentInteractable = null;
+        IInteractable previousInteractable = _currentInteractable;
+        previousInteractable?.OnFocusLost(this);
+
+        _currentInteractable = nextInteractable;
+        _currentInteractable?.OnFocusGained(this);
+        OnInteractableTargetChanged?.Invoke(this, _currentInteractable);
     }
 
     private void OnDrawGizmosSelected()

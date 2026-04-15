@@ -2,7 +2,7 @@ using UnityEngine;
 
 public sealed class AshParlorChoicePromptInteractable : InteractableBase
 {
-    private AshParlorRunController _controller;
+    private FloorRunController _controller;
 
     private void Awake()
     {
@@ -17,7 +17,7 @@ public sealed class AshParlorChoicePromptInteractable : InteractableBase
         }
     }
 
-    public void Configure(AshParlorRunController controller, string newDisplayName, string newPromptText)
+    public void Configure(FloorRunController controller, string newDisplayName, string newPromptText)
     {
         _controller = controller;
         ConfigurePresentation(newDisplayName, newPromptText);

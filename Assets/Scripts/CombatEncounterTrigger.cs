@@ -180,6 +180,7 @@ public class CombatEncounterTrigger : MonoBehaviour
 
     private void TryStartEncounter(Collider other)
     {
+        GameStateHub gameStateHub = GameStateHub.Instance;
         if (_triggered || other.GetComponent<PlayerMover>() == null)
         {
             return;
@@ -187,7 +188,7 @@ public class CombatEncounterTrigger : MonoBehaviour
 
         if (!string.IsNullOrWhiteSpace(requiredObjectiveId))
         {
-            if (QuestTracker.Instance == null || QuestTracker.Instance.CurrentObjectiveId != requiredObjectiveId)
+            if (gameStateHub == null || !gameStateHub.IsCurrentObjective(requiredObjectiveId))
             {
                 if (SimpleDialogueUI.Instance != null && !SimpleDialogueUI.IsOpen)
                 {
@@ -197,7 +198,7 @@ public class CombatEncounterTrigger : MonoBehaviour
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(requiredItemId) && !ChapterState.HasItem(requiredItemId))
+        if (!string.IsNullOrWhiteSpace(requiredItemId) && (gameStateHub == null || !gameStateHub.HasCollectedItem(requiredItemId)))
         {
             if (SimpleDialogueUI.Instance != null && !SimpleDialogueUI.IsOpen)
             {
@@ -228,10 +229,10 @@ public class CombatEncounterTrigger : MonoBehaviour
 
         SpawnEnemy();
 
-        if (QuestTracker.Instance != null)
+        if (GameStateHub.Instance != null)
         {
             Transform target = ActiveEnemy != null ? ActiveEnemy.transform : transform;
-            QuestTracker.Instance.SetObjective(objectiveId, objectiveText, target, objectiveMarker);
+            GameStateHub.Instance.SetObjective(objectiveId, objectiveText, target, objectiveMarker);
         }
     }
 
@@ -308,14 +309,11 @@ public class CombatEncounterTrigger : MonoBehaviour
 
     private IEnumerator FinishEncounter()
     {
-        if (QuestTracker.Instance != null)
-        {
-            QuestTracker.Instance.CompleteObjective(objectiveId);
-        }
+        GameStateHub.Instance?.CompleteObjective(objectiveId);
 
         if (!string.IsNullOrWhiteSpace(completionFlagId))
         {
-            ChapterState.SetFlag(completionFlagId, true);
+            GameStateHub.Instance?.SetChapterFlag(completionFlagId, "true");
         }
 
         if (SimpleDialogueUI.Instance != null)

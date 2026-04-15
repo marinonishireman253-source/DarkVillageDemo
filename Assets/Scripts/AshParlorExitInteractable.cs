@@ -11,7 +11,7 @@ public sealed class AshParlorExitInteractable : InteractableBase
     [SerializeField] private Color lockedColor = new Color(0.23f, 0.22f, 0.24f, 1f);
     [SerializeField] private Color unlockedColor = new Color(0.82f, 0.65f, 0.3f, 1f);
 
-    private AshParlorRunController _controller;
+    private FloorRunController _controller;
     private bool _isUnlocked;
 
     private void Awake()
@@ -21,11 +21,12 @@ public sealed class AshParlorExitInteractable : InteractableBase
             displayName = "塔梯";
         }
 
+        SynchronizeUnlockedStateFromHub();
         RefreshPrompt();
         ApplyState();
     }
 
-    public void Configure(AshParlorRunController controller, Light exitLight, Renderer[] renderers)
+    public void Configure(FloorRunController controller, Light exitLight, Renderer[] renderers)
     {
         _controller = controller;
         accentLight = exitLight;
@@ -35,6 +36,7 @@ public sealed class AshParlorExitInteractable : InteractableBase
 
     public override void Interact(PlayerMover player)
     {
+        SynchronizeUnlockedStateFromHub();
         _controller?.TryUseExit(player);
     }
 
@@ -43,6 +45,28 @@ public sealed class AshParlorExitInteractable : InteractableBase
         _isUnlocked = unlocked;
         RefreshPrompt();
         ApplyState();
+    }
+
+    private void SynchronizeUnlockedStateFromHub()
+    {
+        if (GameStateHub.Instance == null)
+        {
+            return;
+        }
+
+        string exitUnlockedFlagId = _controller != null ? _controller.ExitUnlockedFlagId : string.Empty;
+        if (string.IsNullOrWhiteSpace(exitUnlockedFlagId))
+        {
+            return;
+        }
+
+        string flagValue = GameStateHub.Instance.GetChapterFlag(exitUnlockedFlagId);
+        if (string.IsNullOrEmpty(flagValue))
+        {
+            return;
+        }
+
+        _isUnlocked = string.Equals(flagValue, "true", System.StringComparison.OrdinalIgnoreCase);
     }
 
     private void RefreshPrompt()

@@ -65,7 +65,14 @@ public sealed class SceneLoader : MonoBehaviour
             yield return new WaitForSecondsRealtime(delay);
         }
 
-        SaveSystem.SaveIfPossible();
+        if (GameStateHub.Instance != null)
+        {
+            GameStateHub.Instance.Save();
+        }
+        else
+        {
+            SaveSystem.SaveIfPossible();
+        }
         SceneManager.LoadScene(MainScenePath);
     }
 }

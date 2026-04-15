@@ -22,7 +22,7 @@ public sealed class AshParlorChoiceInteractable : InteractableBase
     public ChoiceKind Kind => choiceKind;
     public bool IsResolved { get; private set; }
 
-    private AshParlorRunController _controller;
+    private FloorRunController _controller;
 
     private void Awake()
     {
@@ -36,7 +36,7 @@ public sealed class AshParlorChoiceInteractable : InteractableBase
     }
 
     public void Configure(
-        AshParlorRunController controller,
+        FloorRunController controller,
         ChoiceKind kind,
         Light lightSource,
         Renderer[] renderers,

@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -8,6 +9,11 @@ using UnityEngine.UI;
 
 public sealed class FloorSummaryPanel : MonoBehaviour
 {
+    private const string RiskChoiceLabel = "选择了风险之路";
+    private const string SafeChoiceLabel = "选择了安全之路";
+    private const string RiskNarrative = "你选择直面灰烬。代价刻在身上，但你带走了一片真相的碎片。";
+    private const string SafeNarrative = "你绕过了深渊的边缘。安全抵达——却把一些东西永远地留在了身后。";
+
     public readonly struct SummaryData
     {
         public SummaryData(string title, string collectionLine, string choiceLine, string narrativeLine, string continueLabel)
@@ -28,6 +34,7 @@ public sealed class FloorSummaryPanel : MonoBehaviour
 
     public static FloorSummaryPanel Instance { get; private set; }
     public static bool IsVisible => Instance != null && Instance._isVisible;
+    public static event Action<bool> OnVisibilityChanged;
 
     private UiTheme _theme;
     private CanvasGroup _canvasGroup;
@@ -58,6 +65,11 @@ public sealed class FloorSummaryPanel : MonoBehaviour
     {
         if (Instance == this)
         {
+            if (_isVisible)
+            {
+                OnVisibilityChanged?.Invoke(false);
+            }
+
             Instance = null;
         }
     }
@@ -108,6 +120,7 @@ public sealed class FloorSummaryPanel : MonoBehaviour
         _continueAction = onContinue;
         _isVisible = true;
         _openedFrame = Time.frameCount;
+        OnVisibilityChanged?.Invoke(true);
         gameObject.SetActive(true);
 
         _titleText.text = string.IsNullOrWhiteSpace(summary.Title) ? "—— 灰烬客厅 · 通过 ——" : summary.Title.Trim();
@@ -133,6 +146,41 @@ public sealed class FloorSummaryPanel : MonoBehaviour
         {
             EventSystem.current.SetSelectedGameObject(_continueButton.gameObject);
         }
+    }
+
+    public SummaryData BuildCurrentSummary(string title, IEnumerable<string> floorItemIds, string continueLabel)
+    {
+        InventoryController.FloorCollectionSummary collectionSummary = GameStateHub.Instance != null
+            ? GameStateHub.Instance.GetFloorCollectionSummary(floorItemIds)
+            : InventoryController.GetCurrentFloorCollectionSummary(floorItemIds);
+        ChapterState.ChoiceResult choiceResult = GameStateHub.Instance != null
+            ? GameStateHub.Instance.CurrentChoiceResult
+            : ChapterState.ChoiceResult.None;
+        string choiceLine;
+        string narrativeLine;
+
+        switch (choiceResult)
+        {
+            case ChapterState.ChoiceResult.Risk:
+                choiceLine = RiskChoiceLabel;
+                narrativeLine = RiskNarrative;
+                break;
+            case ChapterState.ChoiceResult.Safe:
+                choiceLine = SafeChoiceLabel;
+                narrativeLine = SafeNarrative;
+                break;
+            default:
+                choiceLine = "尚未留下明确的选择记录";
+                narrativeLine = "这一层已经结束，但它留下的重量还没有名字。";
+                break;
+        }
+
+        return new SummaryData(
+            title,
+            $"{collectionSummary.CollectedCount} / {collectionSummary.TotalCollectibleCount}",
+            choiceLine,
+            narrativeLine,
+            continueLabel);
     }
 
     public void Hide()
@@ -373,6 +421,7 @@ public sealed class FloorSummaryPanel : MonoBehaviour
         _isVisible = false;
         _openedFrame = -1;
         _continueAction = null;
+        OnVisibilityChanged?.Invoke(false);
 
         if (_canvasGroup != null)
         {

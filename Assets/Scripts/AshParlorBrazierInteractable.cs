@@ -18,7 +18,7 @@ public sealed class AshParlorBrazierInteractable : InteractableBase
     public int BrazierIndex => brazierIndex;
     public bool IsLit { get; private set; }
 
-    private AshParlorRunController _controller;
+    private FloorRunController _controller;
 
     private void Awake()
     {
@@ -31,12 +31,28 @@ public sealed class AshParlorBrazierInteractable : InteractableBase
         ApplyState();
     }
 
-    public void Configure(AshParlorRunController controller, int index, Light brazierLight, Renderer[] renderers)
+    public void Configure(FloorRunController controller, int index)
     {
         _controller = controller;
         brazierIndex = Mathf.Max(1, index);
-        flameLight = brazierLight;
-        targetRenderers = renderers;
+        ApplyState();
+    }
+
+    public void Configure(FloorRunController controller, int index, Light brazierLight, Renderer[] renderers)
+    {
+        _controller = controller;
+        brazierIndex = Mathf.Max(1, index);
+
+        if (brazierLight != null)
+        {
+            flameLight = brazierLight;
+        }
+
+        if (renderers != null && renderers.Length > 0)
+        {
+            targetRenderers = renderers;
+        }
+
         ApplyState();
     }
 

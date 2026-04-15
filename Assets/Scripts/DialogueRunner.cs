@@ -60,6 +60,12 @@ public class DialogueRunner : MonoBehaviour
         }
 
         DialogueChoice choice = _currentNode.Choices[choiceIndex];
+        if (!IsChoiceAvailable(choice))
+        {
+            Debug.LogWarning($"[DialogueRunner] Choice '{choice.ChoiceText}' is not available under current game state.");
+            return;
+        }
+
         if (choice.NextNode != null)
         {
             ShowNode(choice.NextNode);
@@ -107,11 +113,7 @@ public class DialogueRunner : MonoBehaviour
         // 完成任务目标
         if (!string.IsNullOrWhiteSpace(node.CompleteObjectiveId))
         {
-            QuestTracker tracker = QuestTracker.Instance;
-            if (tracker != null)
-            {
-                tracker.CompleteObjective(node.CompleteObjectiveId);
-            }
+            GameStateHub.Instance?.CompleteObjective(node.CompleteObjectiveId);
         }
 
         OnNodeStarted?.Invoke(node);
@@ -123,5 +125,46 @@ public class DialogueRunner : MonoBehaviour
         _currentNode = null;
         _nodeHistory.Clear();
         OnDialogueEnded?.Invoke();
+    }
+
+    private static bool IsChoiceAvailable(DialogueChoice choice)
+    {
+        if (choice == null || string.IsNullOrWhiteSpace(choice.Tag) || GameStateHub.Instance == null)
+        {
+            return true;
+        }
+
+        string tag = choice.Tag.Trim();
+        bool invert = false;
+
+        if (tag.StartsWith("!"))
+        {
+            invert = true;
+            tag = tag.Substring(1).Trim();
+        }
+
+        if (!tag.StartsWith("flag:", System.StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        string expression = tag.Substring(5).Trim();
+        if (string.IsNullOrWhiteSpace(expression))
+        {
+            return true;
+        }
+
+        string key = expression;
+        string expectedValue = "true";
+        int separatorIndex = expression.IndexOf('=');
+        if (separatorIndex >= 0)
+        {
+            key = expression.Substring(0, separatorIndex).Trim();
+            expectedValue = expression.Substring(separatorIndex + 1).Trim();
+        }
+
+        string actualValue = GameStateHub.Instance.GetChapterFlag(key);
+        bool matches = string.Equals(actualValue, expectedValue, System.StringComparison.OrdinalIgnoreCase);
+        return invert ? !matches : matches;
     }
 }

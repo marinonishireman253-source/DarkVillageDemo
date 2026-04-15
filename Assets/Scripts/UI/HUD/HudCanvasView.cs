@@ -35,6 +35,13 @@ public sealed class HudCanvasView : MonoBehaviour
     [SerializeField] private Image _statusHealthFill;
     private CanvasGroup _statusGroup;
 
+    [Header("Environment Dock")]
+    [SerializeField] private RectTransform _environmentPanel;
+    [SerializeField] private TMP_Text _environmentIconText;
+    [SerializeField] private TMP_Text _environmentTitleText;
+    [SerializeField] private TMP_Text _environmentBodyText;
+    private CanvasGroup _environmentGroup;
+
     [Header("Combat Dock")]
     [SerializeField] private RectTransform _combatPanel;
     [SerializeField] private TMP_Text _combatEncounterText;
@@ -75,6 +82,7 @@ public sealed class HudCanvasView : MonoBehaviour
         HideCompletionBanner();
         HideInteractionPrompt();
         HideStatusPanel();
+        HideEnvironmentPanel();
         HideCombatPanel();
         HideWorldMarker();
 
@@ -226,6 +234,32 @@ public sealed class HudCanvasView : MonoBehaviour
         }
     }
 
+    public void SetEnvironmentPanel(bool visible, string icon, string title, string body)
+    {
+        if (_environmentPanel == null)
+        {
+            return;
+        }
+
+        _environmentPanel.gameObject.SetActive(visible);
+        if (!visible)
+        {
+            return;
+        }
+
+        _environmentIconText.text = string.IsNullOrWhiteSpace(icon) ? "●" : icon.Trim();
+        _environmentTitleText.text = string.IsNullOrWhiteSpace(title) ? "区域状态" : title.Trim();
+        _environmentBodyText.text = string.IsNullOrWhiteSpace(body) ? "未进入光区" : body.Trim();
+    }
+
+    public void HideEnvironmentPanel()
+    {
+        if (_environmentPanel != null)
+        {
+            _environmentPanel.gameObject.SetActive(false);
+        }
+    }
+
     public void SetCombatPanel(bool visible, string playerLine, string controlsLine, string encounterLine, string enemyLine, bool showEncounterDetails)
     {
         if (_combatPanel == null)
@@ -330,6 +364,7 @@ public sealed class HudCanvasView : MonoBehaviour
     private void BuildLayout()
     {
         BuildStatusPanel();
+        BuildEnvironmentPanel();
         BuildQuestPanel();
         BuildCompletionBanner();
         BuildInteractionPrompt();
@@ -459,6 +494,64 @@ public sealed class HudCanvasView : MonoBehaviour
             TextAnchor.UpperLeft,
             _theme.SecondaryText);
         _questBodyText.lineSpacing = 4f;
+    }
+
+    private void BuildEnvironmentPanel()
+    {
+        RectTransform inner = CreateCard(
+            "EnvironmentPanel",
+            transform,
+            new Vector2(0f, 1f),
+            new Vector2(0f, 1f),
+            new Vector2(0f, 1f),
+            new Vector2(266f, 82f),
+            new Vector2(22f, -132f),
+            new Color(0.03f, 0.04f, 0.06f, 0.88f),
+            new Color(0.09f, 0.11f, 0.15f, 0.92f),
+            out _environmentPanel);
+        _environmentGroup = UiFactory.GetOrAddCanvasGroup(_environmentPanel.gameObject);
+
+        _environmentIconText = UiFactory.CreateText(
+            "EnvironmentIcon",
+            inner,
+            new Vector2(0f, 0.5f),
+            new Vector2(0f, 0.5f),
+            new Vector2(0f, 0.5f),
+            new Vector2(34f, 34f),
+            new Vector2(26f, 0f),
+            _theme.DisplayFont,
+            24,
+            FontStyle.Bold,
+            TextAnchor.MiddleCenter,
+            _theme.Brass);
+
+        _environmentTitleText = UiFactory.CreateText(
+            "EnvironmentTitle",
+            inner,
+            new Vector2(0f, 1f),
+            new Vector2(1f, 1f),
+            new Vector2(0f, 1f),
+            new Vector2(-74f, 20f),
+            new Vector2(58f, -22f),
+            _theme.DisplayFont,
+            16,
+            FontStyle.Bold,
+            TextAnchor.MiddleLeft,
+            _theme.PrimaryText);
+
+        _environmentBodyText = UiFactory.CreateText(
+            "EnvironmentBody",
+            inner,
+            new Vector2(0f, 0f),
+            new Vector2(1f, 1f),
+            new Vector2(0f, 1f),
+            new Vector2(-74f, -36f),
+            new Vector2(58f, -28f),
+            _theme.BodyFont,
+            13,
+            FontStyle.Normal,
+            TextAnchor.UpperLeft,
+            _theme.SecondaryText);
     }
 
     private void BuildCompletionBanner()

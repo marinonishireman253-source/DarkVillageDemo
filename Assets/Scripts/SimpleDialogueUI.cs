@@ -10,6 +10,7 @@ public class SimpleDialogueUI : MonoBehaviour
     public static bool IsOpen => Instance != null && Instance._isOpen;
     public static bool AllLinesShown => Instance != null && Instance._currentLineIndex >= Instance._lines.Count - 1;
     public static int LastClosedFrame { get; private set; } = -1;
+    public static event System.Action<bool> OnOpenStateChanged;
 
     public event System.Action OnAllLinesCompleted;
 
@@ -34,6 +35,11 @@ public class SimpleDialogueUI : MonoBehaviour
     {
         if (Instance == this)
         {
+            if (_isOpen)
+            {
+                OnOpenStateChanged?.Invoke(false);
+            }
+
             if (UiBootstrap.TryGetDialogueView(out DialogueCanvasView dialogueView))
             {
                 dialogueView.HideDialogue();
@@ -120,6 +126,7 @@ public class SimpleDialogueUI : MonoBehaviour
         _currentLineIndex = 0;
         _isOpen = true;
         _openedFrame = Time.frameCount;
+        OnOpenStateChanged?.Invoke(true);
 
         DialogueVoicePlayer voicePlayer = DialogueVoicePlayer.Instance;
         if (voicePlayer != null)
@@ -138,6 +145,7 @@ public class SimpleDialogueUI : MonoBehaviour
         _lines.Clear();
         _currentLineIndex = 0;
         _openedFrame = -1;
+        OnOpenStateChanged?.Invoke(false);
 
         if (UiBootstrap.TryGetDialogueView(out DialogueCanvasView dialogueView))
         {

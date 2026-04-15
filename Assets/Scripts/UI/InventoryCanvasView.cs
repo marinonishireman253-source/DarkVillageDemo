@@ -73,6 +73,7 @@ public sealed class InventoryCanvasView : MonoBehaviour
     private TMP_Text _characterCombatText;
     private TMP_Text _characterObjectiveText;
     private TMP_Text _characterNotesText;
+    private InventorySlotUI _equippedWeaponSlot;
 
     private TMP_Text _emptyText;
     private TMP_Text _detailTitleText;
@@ -298,6 +299,65 @@ public sealed class InventoryCanvasView : MonoBehaviour
         statsEyebrow.characterSpacing = 5f;
         _characterHealthText = CreateInfoLine(statsCard, "CharacterHealth", -58f);
         _characterCombatText = CreateInfoLine(statsCard, "CharacterCombat", -102f);
+
+        RectTransform equipmentCard = CreateInsetCard(leftColumn, "EquipmentCard", new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(-34f, 148f), new Vector2(0f, 214f));
+        TMP_Text equipmentEyebrow = CreateSectionLabel(equipmentCard, "装备");
+        equipmentEyebrow.characterSpacing = 5f;
+
+        Image slotBackground = UiFactory.CreateImage(
+            "WeaponSlotFrame",
+            equipmentCard,
+            new Vector2(0f, 1f),
+            new Vector2(0f, 1f),
+            new Vector2(0f, 1f),
+            new Vector2(92f, 92f),
+            new Vector2(20f, -82f),
+            new Color(1f, 1f, 1f, 0.06f));
+        Image slotIcon = UiFactory.CreateImage(
+            "WeaponSlotIcon",
+            slotBackground.transform,
+            new Vector2(0.5f, 0.5f),
+            new Vector2(0.5f, 0.5f),
+            new Vector2(0.5f, 0.5f),
+            new Vector2(58f, 58f),
+            Vector2.zero,
+            new Color(1f, 1f, 1f, 0.08f));
+
+        TMP_Text weaponNameText = UiFactory.CreateText(
+            "WeaponName",
+            equipmentCard,
+            new Vector2(0f, 1f),
+            new Vector2(1f, 1f),
+            new Vector2(0f, 1f),
+            new Vector2(-156f, 30f),
+            new Vector2(132f, -82f),
+            _theme.BodyFont,
+            18,
+            FontStyle.Bold,
+            TextAnchor.MiddleLeft,
+            _theme.PrimaryText);
+
+        TMP_Text weaponStatText = UiFactory.CreateText(
+            "WeaponStat",
+            equipmentCard,
+            new Vector2(0f, 1f),
+            new Vector2(1f, 1f),
+            new Vector2(0f, 1f),
+            new Vector2(-156f, 24f),
+            new Vector2(132f, -118f),
+            _theme.BodyFont,
+            15,
+            FontStyle.Normal,
+            TextAnchor.MiddleLeft,
+            _theme.SecondaryText);
+
+        _equippedWeaponSlot = equipmentCard.gameObject.AddComponent<InventorySlotUI>();
+        _equippedWeaponSlot.Configure(
+            slotIcon,
+            weaponNameText,
+            weaponStatText,
+            _theme.PrimaryText,
+            new Color(_theme.PrimaryText.r, _theme.PrimaryText.g, _theme.PrimaryText.b, 0.08f));
 
         RectTransform rightColumn = UiFactory.CreateRect("CharacterRightColumn", parent, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
         rightColumn.offsetMin = new Vector2(388f, 0f);

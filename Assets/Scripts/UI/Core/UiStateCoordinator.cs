@@ -16,12 +16,23 @@ public sealed class UiStateCoordinator : MonoBehaviour
     }
 
     public static UiStateCoordinator Instance { get; private set; }
+    public static event Action<UiStateCoordinator> OnInstanceChanged;
 
     public UiMode CurrentMode { get; private set; } = UiMode.Exploration;
+    public bool BlocksPlayerMovement => BlocksPlayerMovementForMode(CurrentMode);
+    public bool BlocksPlayerActions => BlocksPlayerActionsForMode(CurrentMode);
+    public bool BlocksPlayerInteraction => BlocksPlayerInteractionForMode(CurrentMode);
+    public bool PausesEnemyBehavior => PausesEnemyBehaviorForMode(CurrentMode);
+    public bool AllowsInteractionPrompt => AllowsInteractionPromptForMode(CurrentMode);
 
     public event Action<UiMode> OnModeChanged;
 
     private PlayerMover _player;
+    private bool _isDialogueOpen;
+    private bool _isInventoryOpen;
+    private bool _isFloorSummaryVisible;
+    private bool _isChoiceOverlayVisible;
+    private bool _isChapterCompleteVisible;
 
     private void Awake()
     {
@@ -32,6 +43,34 @@ public sealed class UiStateCoordinator : MonoBehaviour
         }
 
         Instance = this;
+        OnInstanceChanged?.Invoke(this);
+    }
+
+    private void OnEnable()
+    {
+        PlayerMover.OnLocalInstanceChanged += HandlePlayerChanged;
+        SimpleDialogueUI.OnOpenStateChanged += HandleDialogueOpenStateChanged;
+        InventoryController.OnOpenStateChanged += HandleInventoryOpenStateChanged;
+        FloorSummaryPanel.OnVisibilityChanged += HandleFloorSummaryVisibilityChanged;
+        AshParlorChoiceOverlay.OnVisibilityChanged += HandleChoiceOverlayVisibilityChanged;
+        ChapterCompleteOverlay.OnVisibilityChanged += HandleChapterCompleteVisibilityChanged;
+        HandlePlayerChanged(PlayerMover.LocalInstance);
+        HandleDialogueOpenStateChanged(SimpleDialogueUI.IsOpen || DialogueRunner.IsActive);
+        HandleInventoryOpenStateChanged(InventoryController.IsOpen);
+        HandleFloorSummaryVisibilityChanged(FloorSummaryPanel.IsVisible);
+        HandleChoiceOverlayVisibilityChanged(AshParlorChoiceOverlay.IsVisible);
+        HandleChapterCompleteVisibilityChanged(ChapterCompleteOverlay.IsVisible);
+    }
+
+    private void OnDisable()
+    {
+        PlayerMover.OnLocalInstanceChanged -= HandlePlayerChanged;
+        SimpleDialogueUI.OnOpenStateChanged -= HandleDialogueOpenStateChanged;
+        InventoryController.OnOpenStateChanged -= HandleInventoryOpenStateChanged;
+        FloorSummaryPanel.OnVisibilityChanged -= HandleFloorSummaryVisibilityChanged;
+        AshParlorChoiceOverlay.OnVisibilityChanged -= HandleChoiceOverlayVisibilityChanged;
+        ChapterCompleteOverlay.OnVisibilityChanged -= HandleChapterCompleteVisibilityChanged;
+        _player = null;
     }
 
     private void OnDestroy()
@@ -39,16 +78,12 @@ public sealed class UiStateCoordinator : MonoBehaviour
         if (Instance == this)
         {
             Instance = null;
+            OnInstanceChanged?.Invoke(null);
         }
     }
 
     private void Update()
     {
-        if (_player == null)
-        {
-            _player = FindFirstObjectByType<PlayerMover>();
-        }
-
         UiMode nextMode = ResolveMode();
         if (nextMode == CurrentMode)
         {
@@ -59,29 +94,59 @@ public sealed class UiStateCoordinator : MonoBehaviour
         OnModeChanged?.Invoke(CurrentMode);
     }
 
+    private void HandlePlayerChanged(PlayerMover player)
+    {
+        _player = player;
+    }
+
+    private void HandleDialogueOpenStateChanged(bool isOpen)
+    {
+        _isDialogueOpen = isOpen;
+    }
+
+    private void HandleInventoryOpenStateChanged(bool isOpen)
+    {
+        _isInventoryOpen = isOpen;
+    }
+
+    private void HandleFloorSummaryVisibilityChanged(bool isVisible)
+    {
+        _isFloorSummaryVisible = isVisible;
+    }
+
+    private void HandleChoiceOverlayVisibilityChanged(bool isVisible)
+    {
+        _isChoiceOverlayVisible = isVisible;
+    }
+
+    private void HandleChapterCompleteVisibilityChanged(bool isVisible)
+    {
+        _isChapterCompleteVisible = isVisible;
+    }
+
     private UiMode ResolveMode()
     {
-        if (ChapterCompleteOverlay.IsVisible)
+        if (_isChapterCompleteVisible)
         {
             return UiMode.ChapterComplete;
         }
 
-        if (FloorSummaryPanel.IsVisible)
+        if (_isFloorSummaryVisible)
         {
             return UiMode.Paused;
         }
 
-        if (AshParlorChoiceOverlay.IsVisible)
+        if (_isChoiceOverlayVisible)
         {
             return UiMode.Paused;
         }
 
-        if (SimpleDialogueUI.IsOpen || DialogueRunner.IsActive)
+        if (_isDialogueOpen || DialogueRunner.IsActive)
         {
             return UiMode.Dialogue;
         }
 
-        if (InventoryController.IsOpen)
+        if (_isInventoryOpen)
         {
             return UiMode.Inventory;
         }
@@ -97,5 +162,45 @@ public sealed class UiStateCoordinator : MonoBehaviour
         }
 
         return UiMode.Exploration;
+    }
+
+    public static bool BlocksPlayerMovementForMode(UiMode mode)
+    {
+        return mode == UiMode.Dialogue
+            || mode == UiMode.Inventory
+            || mode == UiMode.ChapterComplete
+            || mode == UiMode.Loading
+            || mode == UiMode.Paused;
+    }
+
+    public static bool BlocksPlayerActionsForMode(UiMode mode)
+    {
+        return BlocksPlayerMovementForMode(mode);
+    }
+
+    public static bool BlocksPlayerInteractionForMode(UiMode mode)
+    {
+        return BlocksPlayerMovementForMode(mode);
+    }
+
+    public static bool PausesEnemyBehaviorForMode(UiMode mode)
+    {
+        return mode == UiMode.Dialogue
+            || mode == UiMode.Inventory
+            || mode == UiMode.ChapterComplete
+            || mode == UiMode.Loading
+            || mode == UiMode.Paused;
+    }
+
+    public static bool AllowsInteractionPromptForMode(UiMode mode)
+    {
+        return !BlocksPlayerInteractionForMode(mode);
+    }
+
+    public static bool AllowsInventoryForMode(UiMode mode)
+    {
+        return mode == UiMode.Exploration
+            || mode == UiMode.InteractionFocus
+            || mode == UiMode.Combat;
     }
 }

@@ -87,8 +87,9 @@ public class GameBootstrap : MonoBehaviour
         EnsureInteriorLighting();
         EnsureUi();
         EnsureInventory();
+        EnsureGameStateHub();
         TowerInteriorSlice.Ensure(player);
-        QuestTracker.Instance?.ClearObjective();
+        GameStateHub.Instance?.ClearObjective();
         EnsureCamera(player);
         EnsureWetFloor();
         EnsureRain();
@@ -117,8 +118,9 @@ public class GameBootstrap : MonoBehaviour
         EnsureBackgroundMusic();
         EnsureUi();
         EnsureInventory();
+        EnsureGameStateHub();
         TowerInteriorSlice.Ensure(player);
-        QuestTracker.Instance?.ClearObjective();
+        GameStateHub.Instance?.ClearObjective();
         EnsureCamera(player);
         EnsureWetFloor();
         EnsureRain();
@@ -130,18 +132,23 @@ public class GameBootstrap : MonoBehaviour
         PlayerMover existingPlayer = FindFirstObjectByType<PlayerMover>();
         if (existingPlayer != null)
         {
-            EnsurePlayerCombat(existingPlayer.gameObject);
-            EnsurePlayerVisual(existingPlayer.gameObject);
+            ValidatePlayerPrefabInstance(existingPlayer.gameObject);
             return existingPlayer;
         }
 
-        GameObject player = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-        player.name = "Player";
+        CorePrefabCatalog catalog = CorePrefabCatalog.Load();
+        GameObject playerPrefab = catalog != null ? catalog.PlayerPrefab : null;
+        if (playerPrefab == null)
+        {
+            Debug.LogError("[GameBootstrap] Missing Player prefab in CorePrefabCatalog.");
+            return null;
+        }
+
+        GameObject player = Instantiate(playerPrefab);
+        player.name = playerPrefab.name;
         player.transform.position = DefaultPlayerSpawnPosition;
-        PlayerMover mover = player.AddComponent<PlayerMover>();
-        EnsurePlayerCombat(player);
-        EnsurePlayerVisual(player);
-        return mover;
+        ValidatePlayerPrefabInstance(player);
+        return player.GetComponent<PlayerMover>();
     }
 
     private void ConfigurePlayerMovement(PlayerMover player)
@@ -156,11 +163,6 @@ public class GameBootstrap : MonoBehaviour
 
     private void EnsureCamera(PlayerMover player)
     {
-        if (player == null)
-        {
-            return;
-        }
-
         Camera mainCamera = Camera.main;
         if (mainCamera == null)
         {
@@ -177,6 +179,11 @@ public class GameBootstrap : MonoBehaviour
         }
 
         GameObject cameraRoot = mainCamera.gameObject;
+        if (!cameraRoot.activeSelf)
+        {
+            cameraRoot.SetActive(true);
+        }
+
         if (!cameraRoot.CompareTag("MainCamera"))
         {
             cameraRoot.tag = "MainCamera";
@@ -201,6 +208,7 @@ public class GameBootstrap : MonoBehaviour
         mainCamera.enabled = true;
         mainCamera.orthographic = false;
         mainCamera.fieldOfView = InteriorCameraProfile.FieldOfView;
+        mainCamera.targetDisplay = 0;
 
         CameraFollow follow = cameraRoot.GetComponent<CameraFollow>();
         if (follow == null)
@@ -211,6 +219,16 @@ public class GameBootstrap : MonoBehaviour
         follow.Configure(InteriorCameraProfile.Offset, false, InteriorCameraProfile.LookOffset, InteriorCameraProfile.EulerAngles);
         follow.ConfigureSprintFeel(Vector3.zero, 5f);
         follow.ConfigureHorizontalBounds(TowerInteriorSlice.CameraTrackXRange);
+
+        if (player == null)
+        {
+            Vector3 fallbackTargetPosition = DefaultPlayerSpawnPosition;
+            mainCamera.transform.position = fallbackTargetPosition + InteriorCameraProfile.Offset;
+            mainCamera.transform.rotation = Quaternion.Euler(InteriorCameraProfile.EulerAngles);
+            follow.SetTarget(null, false);
+            Debug.LogWarning("[GameBootstrap] Camera fallback activated before PlayerMover was available.");
+            return;
+        }
 
         RoomCameraZone roomZone = TowerInteriorSlice.FindBestZone(player);
         if (roomZone != null)
@@ -254,7 +272,17 @@ public class GameBootstrap : MonoBehaviour
 
         if (FindFirstObjectByType<InteractionPromptUI>() == null)
         {
-            new GameObject("InteractionPromptUI").AddComponent<InteractionPromptUI>();
+            CorePrefabCatalog catalog = CorePrefabCatalog.Load();
+            GameObject interactionPromptPrefab = catalog != null ? catalog.InteractionPromptPrefab : null;
+            if (interactionPromptPrefab != null)
+            {
+                GameObject promptObject = Instantiate(interactionPromptPrefab);
+                promptObject.name = interactionPromptPrefab.name;
+            }
+            else
+            {
+                Debug.LogError("[GameBootstrap] Missing InteractionPrompt prefab in CorePrefabCatalog.");
+            }
         }
 
         if (FindFirstObjectByType<QuestTrackerUI>() == null)
@@ -275,6 +303,11 @@ public class GameBootstrap : MonoBehaviour
         if (FindFirstObjectByType<PlayerStatusHud>() == null)
         {
             new GameObject("PlayerStatusHud").AddComponent<PlayerStatusHud>();
+        }
+
+        if (FindFirstObjectByType<LightZoneHudPresenter>() == null)
+        {
+            new GameObject("LightZoneHudPresenter").AddComponent<LightZoneHudPresenter>();
         }
 
         if (FindFirstObjectByType<DialogueRunner>() == null)
@@ -314,6 +347,14 @@ public class GameBootstrap : MonoBehaviour
         if (FindFirstObjectByType<InventoryController>() == null)
         {
             new GameObject("InventoryController").AddComponent<InventoryController>();
+        }
+    }
+
+    private void EnsureGameStateHub()
+    {
+        if (FindFirstObjectByType<GameStateHub>() == null)
+        {
+            new GameObject("GameStateHub").AddComponent<GameStateHub>();
         }
     }
 
@@ -358,7 +399,7 @@ public class GameBootstrap : MonoBehaviour
 
         if (player.GetComponent<PlayerSplashEffect>() == null)
         {
-            player.gameObject.AddComponent<PlayerSplashEffect>();
+            Debug.LogWarning("[GameBootstrap] Player prefab instance is missing PlayerSplashEffect.", player.gameObject);
         }
     }
 
@@ -373,60 +414,27 @@ public class GameBootstrap : MonoBehaviour
         return scene.name == SceneLoader.MainSceneName || scene.path == SceneLoader.MainScenePath;
     }
 
-    private void EnsurePlayerCombat(GameObject playerObject)
+    private static void ValidatePlayerPrefabInstance(GameObject playerObject)
     {
         if (playerObject == null)
         {
             return;
         }
 
-        if (playerObject.GetComponent<CombatantHealth>() == null)
-        {
-            playerObject.AddComponent<CombatantHealth>();
-        }
-
-        if (playerObject.GetComponent<PlayerCombat>() == null)
-        {
-            playerObject.AddComponent<PlayerCombat>();
-        }
-
-        CapsuleCollider capsule = playerObject.GetComponent<CapsuleCollider>();
-        if (capsule == null)
-        {
-            capsule = playerObject.AddComponent<CapsuleCollider>();
-        }
-
-        capsule.center = new Vector3(0f, 1f, 0f);
-        capsule.height = 2f;
-        capsule.radius = 0.33f;
-
-        Rigidbody body = playerObject.GetComponent<Rigidbody>();
-        if (body == null)
-        {
-            body = playerObject.AddComponent<Rigidbody>();
-        }
-
-        body.useGravity = false;
-        body.isKinematic = true;
-        body.constraints = RigidbodyConstraints.FreezeRotation;
+        WarnIfMissingComponent<PlayerMover>(playerObject, "PlayerMover");
+        WarnIfMissingComponent<PlayerCombat>(playerObject, "PlayerCombat");
+        WarnIfMissingComponent<CombatantHealth>(playerObject, "CombatantHealth");
+        WarnIfMissingComponent<CapsuleCollider>(playerObject, "CapsuleCollider");
+        WarnIfMissingComponent<Rigidbody>(playerObject, "Rigidbody");
+        WarnIfMissingComponent<PlayerSpriteVisual>(playerObject, "PlayerSpriteVisual");
+        WarnIfMissingComponent<PlayerSplashEffect>(playerObject, "PlayerSplashEffect");
     }
 
-    private void EnsurePlayerVisual(GameObject playerObject)
+    private static void WarnIfMissingComponent<T>(GameObject target, string componentName) where T : Component
     {
-        if (playerObject == null)
+        if (target != null && target.GetComponent<T>() == null)
         {
-            return;
-        }
-
-        PlayerCharacterVisual legacyVisual = playerObject.GetComponent<PlayerCharacterVisual>();
-        if (legacyVisual != null)
-        {
-            Destroy(legacyVisual);
-        }
-
-        if (playerObject.GetComponent<PlayerSpriteVisual>() == null)
-        {
-            playerObject.AddComponent<PlayerSpriteVisual>();
+            Debug.LogWarning($"[GameBootstrap] Expected {componentName} on prefab instance '{target.name}'.", target);
         }
     }
 }

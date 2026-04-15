@@ -3,26 +3,11 @@ using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 
-[InitializeOnLoad]
 public static class GameViewAudioGuard
 {
     private const string GameViewTypeName = "UnityEditor.GameView";
     private const string PlayAudioFieldName = "m_PlayAudio";
     private const string LegacyAudioFieldName = "m_AudioPlay";
-
-    static GameViewAudioGuard()
-    {
-        EditorApplication.delayCall += EnsureGameViewAudioEnabled;
-        EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
-    }
-
-    private static void OnPlayModeStateChanged(PlayModeStateChange state)
-    {
-        if (state == PlayModeStateChange.ExitingEditMode || state == PlayModeStateChange.EnteredPlayMode)
-        {
-            EnsureGameViewAudioEnabled();
-        }
-    }
 
     [MenuItem("Tools/Audio/Enable Game View Audio")]
     private static void EnableGameViewAudioMenu()
@@ -32,6 +17,11 @@ public static class GameViewAudioGuard
 
     private static void EnsureGameViewAudioEnabled()
     {
+        if (Application.isBatchMode)
+        {
+            return;
+        }
+
         Type gameViewType = Type.GetType($"{GameViewTypeName}, UnityEditor");
         if (gameViewType == null)
         {

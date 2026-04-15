@@ -21,6 +21,7 @@ public sealed class SaveSystem : MonoBehaviour
         public string choiceResult;
         public FlagData[] flags;
         public string[] collectedItems;
+        public int currentFloorIndex;
         public string savedAtUtc;
     }
 
@@ -28,7 +29,8 @@ public sealed class SaveSystem : MonoBehaviour
     private sealed class FlagData
     {
         public string id;
-        public bool value;
+        public string value;
+        public bool legacyBoolValue;
     }
 
     private static SaveSystem s_Instance;
@@ -88,6 +90,7 @@ public sealed class SaveSystem : MonoBehaviour
 
         NormalizeLegacySceneReference(data);
         s_PendingLoad = data;
+        GameStateHub.SetCurrentFloorIndexRuntime(data.currentFloorIndex);
         SceneLoader.Load(data.sceneReference);
         return true;
     }
@@ -95,6 +98,16 @@ public sealed class SaveSystem : MonoBehaviour
     public static void SaveIfPossible()
     {
         s_Instance?.SaveCurrentState();
+    }
+
+    public static void Save()
+    {
+        SaveIfPossible();
+    }
+
+    public static bool Load()
+    {
+        return TryLoadLatest();
     }
 
     private void Awake()
@@ -182,7 +195,12 @@ public sealed class SaveSystem : MonoBehaviour
             yield break;
         }
 
-        Dictionary<string, bool> flags = new Dictionary<string, bool>();
+        while (GameStateHub.Instance == null)
+        {
+            yield return null;
+        }
+
+        Dictionary<string, string> flags = new Dictionary<string, string>();
         if (data.flags != null)
         {
             foreach (FlagData flag in data.flags)
@@ -192,11 +210,11 @@ public sealed class SaveSystem : MonoBehaviour
                     continue;
                 }
 
-                flags[flag.id] = flag.value;
+                flags[flag.id] = !string.IsNullOrWhiteSpace(flag.value)
+                    ? flag.value
+                    : flag.legacyBoolValue ? "true" : "false";
             }
         }
-
-        ChapterState.RestoreRuntimeState(flags, data.collectedItems, ParseChoiceResult(data.choiceResult));
 
         PlayerMover player = FindFirstObjectByType<PlayerMover>();
         if (player != null)
@@ -222,7 +240,17 @@ public sealed class SaveSystem : MonoBehaviour
             }
         }
 
-        RestoreObjective(data);
+        GameStateHub.Instance.RestoreState(
+            flags,
+            data.collectedItems,
+            ParseChoiceResult(data.choiceResult),
+            new GameStateHub.ObjectiveStateSnapshot(
+                data.currentObjectiveId,
+                data.currentObjectiveText,
+                data.currentMarkerText,
+                false),
+            ResolveObjectiveTarget(data.currentObjectiveId));
+        GameStateHub.SetCurrentFloorIndexRuntime(data.currentFloorIndex);
         s_Dirty = false;
     }
 
@@ -232,40 +260,23 @@ public sealed class SaveSystem : MonoBehaviour
         SaveCurrentState();
     }
 
-    private void RestoreObjective(SaveData data)
+    private static Transform ResolveObjectiveTarget(string objectiveId)
     {
-        QuestTracker tracker = QuestTracker.Instance;
-        if (tracker == null)
+        if (string.IsNullOrWhiteSpace(objectiveId))
         {
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(data.currentObjectiveId))
-        {
-            tracker.ClearObjective();
-            return;
+            return null;
         }
 
         QuestObjectiveTarget[] objectives = FindObjectsByType<QuestObjectiveTarget>(FindObjectsSortMode.None);
-        QuestObjectiveTarget matched = null;
-
         foreach (QuestObjectiveTarget objective in objectives)
         {
-            if (objective != null && objective.ObjectiveId == data.currentObjectiveId)
+            if (objective != null && objective.ObjectiveId == objectiveId)
             {
-                matched = objective;
-                break;
+                return objective.transform;
             }
         }
 
-        Transform target = matched != null ? matched.transform : null;
-        string objectiveText = string.IsNullOrWhiteSpace(data.currentObjectiveText)
-            ? matched != null ? matched.ObjectiveText : "前往下一个目标"
-            : data.currentObjectiveText;
-        string markerText = string.IsNullOrWhiteSpace(data.currentMarkerText)
-            ? matched != null ? matched.MarkerText : "目标"
-            : data.currentMarkerText;
-        tracker.SetObjective(data.currentObjectiveId, objectiveText, target, markerText);
+        return null;
     }
 
     private void SaveCurrentState()
@@ -293,17 +304,25 @@ public sealed class SaveSystem : MonoBehaviour
     private SaveData BuildSaveData(Scene activeScene, PlayerMover player)
     {
         CombatantHealth health = player.GetComponent<CombatantHealth>();
-        QuestTracker tracker = QuestTracker.Instance;
-        Dictionary<string, bool> runtimeFlags = ChapterState.GetRuntimeFlagsSnapshot();
-        string[] collectedItems = ChapterState.GetCollectedItemsSnapshot();
+        GameStateHub gameStateHub = GameStateHub.Instance;
+        Dictionary<string, string> runtimeFlags = gameStateHub != null
+            ? gameStateHub.GetFlagSnapshot()
+            : new Dictionary<string, string>();
+        string[] collectedItems = gameStateHub != null
+            ? gameStateHub.GetCollectedItemSnapshot()
+            : Array.Empty<string>();
+        GameStateHub.ObjectiveStateSnapshot objectiveState = gameStateHub != null
+            ? gameStateHub.GetObjectiveSnapshot()
+            : new GameStateHub.ObjectiveStateSnapshot(string.Empty, string.Empty, "目标", false);
 
         List<FlagData> flags = new List<FlagData>(runtimeFlags.Count);
-        foreach (KeyValuePair<string, bool> entry in runtimeFlags)
+        foreach (KeyValuePair<string, string> entry in runtimeFlags)
         {
             flags.Add(new FlagData
             {
                 id = entry.Key,
-                value = entry.Value
+                value = entry.Value,
+                legacyBoolValue = string.Equals(entry.Value, "true", StringComparison.OrdinalIgnoreCase)
             });
         }
 
@@ -313,12 +332,13 @@ public sealed class SaveSystem : MonoBehaviour
             playerPosition = new[] { player.transform.position.x, player.transform.position.y, player.transform.position.z },
             playerForward = new[] { player.transform.forward.x, player.transform.forward.y, player.transform.forward.z },
             playerHealth = health != null ? health.CurrentHealth : 0,
-            currentObjectiveId = tracker != null && !tracker.IsCompleted ? tracker.CurrentObjectiveId : string.Empty,
-            currentObjectiveText = tracker != null && !tracker.IsCompleted ? tracker.CurrentObjectiveText : string.Empty,
-            currentMarkerText = tracker != null && !tracker.IsCompleted ? tracker.CurrentMarkerText : string.Empty,
-            choiceResult = ChapterState.CurrentChoiceResult.ToString(),
+            currentObjectiveId = !objectiveState.IsCompleted ? objectiveState.ObjectiveId : string.Empty,
+            currentObjectiveText = !objectiveState.IsCompleted ? objectiveState.ObjectiveText : string.Empty,
+            currentMarkerText = !objectiveState.IsCompleted ? objectiveState.MarkerText : string.Empty,
+            choiceResult = (gameStateHub != null ? gameStateHub.CurrentChoiceResult : ChapterState.ChoiceResult.None).ToString(),
             flags = flags.ToArray(),
             collectedItems = collectedItems,
+            currentFloorIndex = gameStateHub != null ? gameStateHub.CurrentFloorIndex : GameStateHub.CurrentFloorIndexRuntime,
             savedAtUtc = DateTime.UtcNow.ToString("o")
         };
     }

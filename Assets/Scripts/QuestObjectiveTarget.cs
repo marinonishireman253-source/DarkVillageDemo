@@ -40,25 +40,25 @@ public class QuestObjectiveTarget : MonoBehaviour
 
     public void RegisterAsCurrentObjective()
     {
-        if (QuestTracker.Instance == null)
+        if (GameStateHub.Instance == null)
         {
             _pendingAutoRegister = true;
             return;
         }
 
-        QuestTracker.Instance.SetObjective(objectiveId, objectiveText, transform, markerText);
+        GameStateHub.Instance.SetObjective(objectiveId, objectiveText, transform, markerText);
         _pendingAutoRegister = false;
         TryResolveImmediateCompletion();
     }
 
     public void NotifyInteracted()
     {
-        if (!completeOnInteract || QuestTracker.Instance == null)
+        if (!completeOnInteract || GameStateHub.Instance == null)
         {
             return;
         }
 
-        bool completed = QuestTracker.Instance.CompleteObjective(objectiveId);
+        bool completed = GameStateHub.Instance.CompleteObjective(objectiveId);
         if (!completed)
         {
             return;
@@ -86,7 +86,7 @@ public class QuestObjectiveTarget : MonoBehaviour
 
     private void TryAutoRegister()
     {
-        if (!_pendingAutoRegister || QuestTracker.Instance == null)
+        if (!_pendingAutoRegister || GameStateHub.Instance == null)
         {
             return;
         }
@@ -96,7 +96,7 @@ public class QuestObjectiveTarget : MonoBehaviour
 
     private void TryResolveImmediateCompletion()
     {
-        if (!completeOnInteract || QuestTracker.Instance == null)
+        if (!completeOnInteract || GameStateHub.Instance == null)
         {
             return;
         }
@@ -106,7 +106,7 @@ public class QuestObjectiveTarget : MonoBehaviour
             return;
         }
 
-        bool completed = QuestTracker.Instance.CompleteObjective(objectiveId);
+        bool completed = GameStateHub.Instance.CompleteObjective(objectiveId);
         if (!completed)
         {
             return;

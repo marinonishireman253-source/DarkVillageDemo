@@ -5,6 +5,16 @@ using UnityEngine;
 [RequireComponent(typeof(CapsuleCollider))]
 public class SimpleEnemyController : MonoBehaviour
 {
+    public enum EnemyState
+    {
+        Inactive,
+        Idle,
+        Chasing,
+        Attacking,
+        Recovering,
+        Dead
+    }
+
     [SerializeField] private string enemyName = "仪式回响";
     [SerializeField] private int maxHealth = 3;
     [SerializeField] private int contactDamage = 1;
@@ -18,28 +28,31 @@ public class SimpleEnemyController : MonoBehaviour
 
     public string EnemyName => enemyName;
     public CombatantHealth Health { get; private set; }
-    public bool IsAlive => Health != null && !Health.IsDead;
-    public bool IsMoving => _isMoving;
+    public bool IsAlive => CurrentState != EnemyState.Dead && Health != null && !Health.IsDead;
+    public bool IsMoving => CurrentState == EnemyState.Chasing;
     public bool IsEncounterEnabled => _encounterEnabled;
     public float LastAttackStartedAt => _lastAttackStartedAt;
     public float AttackAnimationDuration => attackAnimationDuration;
+    public EnemyState CurrentState { get; private set; } = EnemyState.Idle;
 
     public event System.Action<SimpleEnemyController> OnDefeated;
+    public event System.Action<SimpleEnemyController, EnemyState> OnStateChanged;
 
     private PlayerMover _player;
     private PlayerCombat _playerCombat;
     private Renderer _renderer;
     private float _nextAttackTime;
-    private bool _isMoving;
     private float _lastAttackStartedAt = float.NegativeInfinity;
     private float _moveSpeedMultiplier = 1f;
     private float _attackRangeMultiplier = 1f;
     private float _attackCooldownMultiplier = 1f;
+    private float _lightZoneAttackCooldownMultiplier = 1f;
     private bool _encounterEnabled = true;
-    private bool _attackInProgress;
     private bool _pendingAttackDamage;
     private float _attackDamageAt;
     private float _attackRecoverUntil;
+    private UiStateCoordinator _stateCoordinator;
+    private UiStateCoordinator.UiMode _currentUiMode = UiStateCoordinator.UiMode.Exploration;
 
     private void Awake()
     {
@@ -54,6 +67,28 @@ public class SimpleEnemyController : MonoBehaviour
         }
 
         EnsureColliderDefaults();
+    }
+
+    private void OnEnable()
+    {
+        PlayerMover.OnLocalInstanceChanged += HandlePlayerChanged;
+        PlayerCombat.OnLocalInstanceChanged += HandlePlayerCombatChanged;
+        UiStateCoordinator.OnInstanceChanged += HandleStateCoordinatorChanged;
+
+        BindPlayer(PlayerMover.LocalInstance);
+        BindPlayerCombat(PlayerCombat.LocalInstance);
+        BindStateCoordinator(UiStateCoordinator.Instance);
+    }
+
+    private void OnDisable()
+    {
+        PlayerMover.OnLocalInstanceChanged -= HandlePlayerChanged;
+        PlayerCombat.OnLocalInstanceChanged -= HandlePlayerCombatChanged;
+        UiStateCoordinator.OnInstanceChanged -= HandleStateCoordinatorChanged;
+
+        BindPlayer(null);
+        BindPlayerCombat(null);
+        BindStateCoordinator(null);
     }
 
     private void OnDestroy()
@@ -98,33 +133,47 @@ public class SimpleEnemyController : MonoBehaviour
         _attackCooldownMultiplier = Mathf.Clamp(attackCooldownMultiplier, 0.35f, 3f);
     }
 
+    public void SetLightZoneAttackCooldownMultiplier(float multiplier)
+    {
+        _lightZoneAttackCooldownMultiplier = Mathf.Clamp(multiplier, 0.35f, 2f);
+    }
+
+    public void ResetLightZoneMultipliers()
+    {
+        _lightZoneAttackCooldownMultiplier = 1f;
+    }
+
     public void SetEncounterEnabled(bool enabled)
     {
         _encounterEnabled = enabled;
-
         if (!enabled)
         {
-            _isMoving = false;
+            TransitionToState(EnemyState.Inactive);
+            return;
+        }
+
+        if (CurrentState == EnemyState.Inactive)
+        {
+            TransitionToState(EnemyState.Idle);
         }
     }
 
     private void Update()
     {
-        if (!IsAlive || !_encounterEnabled || SimpleDialogueUI.IsOpen || InventoryController.IsOpen)
+        if (!IsAlive)
         {
-            _isMoving = false;
             return;
         }
 
-        if (_player == null)
+        if (!_encounterEnabled || ShouldSuspendBehavior())
         {
-            _player = FindFirstObjectByType<PlayerMover>();
-            _playerCombat = _player != null ? _player.GetComponent<PlayerCombat>() : null;
+            TransitionToState(EnemyState.Inactive);
+            return;
         }
 
-        if (_player == null || _playerCombat == null || _playerCombat.Health.IsDead)
+        if (_player == null || _playerCombat == null || _playerCombat.Health == null || _playerCombat.Health.IsDead)
         {
-            _isMoving = false;
+            TransitionToState(EnemyState.Idle);
             return;
         }
 
@@ -133,54 +182,169 @@ public class SimpleEnemyController : MonoBehaviour
 
         if (toPlayer.sqrMagnitude <= 0.001f)
         {
-            _isMoving = false;
+            TransitionToState(EnemyState.Idle);
             return;
         }
 
-        Quaternion targetRotation = Quaternion.LookRotation(toPlayer.normalized, Vector3.up);
-        transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, turnSpeed * Time.deltaTime);
+        FaceTowards(toPlayer.normalized);
 
         float distance = toPlayer.magnitude;
         float currentAttackRange = attackRange * _attackRangeMultiplier;
 
-        if (_attackInProgress)
+        switch (CurrentState)
         {
-            _isMoving = false;
+            case EnemyState.Inactive:
+            case EnemyState.Idle:
+                ResolveIdle(distance, currentAttackRange, toPlayer.normalized);
+                break;
 
-            if (_pendingAttackDamage && Time.time >= _attackDamageAt)
-            {
-                _pendingAttackDamage = false;
+            case EnemyState.Chasing:
+                ResolveChasing(distance, currentAttackRange, toPlayer.normalized);
+                break;
 
-                if (distance <= currentAttackRange + 0.08f)
-                {
-                    _playerCombat.Health.TakeDamage(contactDamage);
-                }
-            }
+            case EnemyState.Attacking:
+                ResolveAttacking(distance, currentAttackRange);
+                break;
 
-            if (Time.time < _attackRecoverUntil)
-            {
-                return;
-            }
+            case EnemyState.Recovering:
+                ResolveRecovering(distance, currentAttackRange, toPlayer.normalized);
+                break;
 
-            _attackInProgress = false;
+            case EnemyState.Dead:
+                break;
         }
+    }
 
-        if (distance > currentAttackRange)
+    private void HandlePlayerChanged(PlayerMover player)
+    {
+        BindPlayer(player);
+    }
+
+    private void HandlePlayerCombatChanged(PlayerCombat playerCombat)
+    {
+        BindPlayerCombat(playerCombat);
+    }
+
+    private void HandleStateCoordinatorChanged(UiStateCoordinator stateCoordinator)
+    {
+        BindStateCoordinator(stateCoordinator);
+    }
+
+    private void HandleUiModeChanged(UiStateCoordinator.UiMode mode)
+    {
+        _currentUiMode = mode;
+    }
+
+    private void BindPlayer(PlayerMover player)
+    {
+        _player = player;
+    }
+
+    private void BindPlayerCombat(PlayerCombat playerCombat)
+    {
+        _playerCombat = playerCombat;
+    }
+
+    private void BindStateCoordinator(UiStateCoordinator stateCoordinator)
+    {
+        if (_stateCoordinator == stateCoordinator)
         {
-            _isMoving = true;
-            float currentMoveSpeed = moveSpeed * _moveSpeedMultiplier;
-            transform.position += toPlayer.normalized * (currentMoveSpeed * Time.deltaTime);
             return;
         }
 
-        _isMoving = false;
+        if (_stateCoordinator != null)
+        {
+            _stateCoordinator.OnModeChanged -= HandleUiModeChanged;
+        }
 
+        _stateCoordinator = stateCoordinator;
+        _currentUiMode = _stateCoordinator != null ? _stateCoordinator.CurrentMode : UiStateCoordinator.UiMode.Exploration;
+
+        if (_stateCoordinator != null)
+        {
+            _stateCoordinator.OnModeChanged += HandleUiModeChanged;
+        }
+    }
+
+    private bool ShouldSuspendBehavior()
+    {
+        return UiStateCoordinator.PausesEnemyBehaviorForMode(_currentUiMode);
+    }
+
+    private void ResolveIdle(float distance, float currentAttackRange, Vector3 directionToPlayer)
+    {
+        if (distance > currentAttackRange)
+        {
+            TransitionToState(EnemyState.Chasing);
+            ResolveChasing(distance, currentAttackRange, directionToPlayer);
+            return;
+        }
+
+        if (Time.time < _nextAttackTime)
+        {
+            TransitionToState(EnemyState.Idle);
+            return;
+        }
+
+        StartAttack();
+    }
+
+    private void ResolveChasing(float distance, float currentAttackRange, Vector3 directionToPlayer)
+    {
+        if (distance <= currentAttackRange)
+        {
+            TransitionToState(EnemyState.Idle);
+            ResolveIdle(distance, currentAttackRange, directionToPlayer);
+            return;
+        }
+
+        TransitionToState(EnemyState.Chasing);
+        float currentMoveSpeed = moveSpeed * _moveSpeedMultiplier;
+        transform.position += directionToPlayer * (currentMoveSpeed * Time.deltaTime);
+    }
+
+    private void ResolveAttacking(float distance, float currentAttackRange)
+    {
+        TransitionToState(EnemyState.Attacking);
+
+        if (_pendingAttackDamage && Time.time >= _attackDamageAt)
+        {
+            _pendingAttackDamage = false;
+
+            if (_playerCombat != null && distance <= currentAttackRange + 0.08f)
+            {
+                _playerCombat.ReceiveHit(contactDamage, transform.position);
+            }
+        }
+
+        if (Time.time < _attackRecoverUntil)
+        {
+            return;
+        }
+
+        TransitionToState(EnemyState.Recovering);
+    }
+
+    private void ResolveRecovering(float distance, float currentAttackRange, Vector3 directionToPlayer)
+    {
         if (Time.time < _nextAttackTime)
         {
             return;
         }
 
-        StartAttack();
+        TransitionToState(EnemyState.Idle);
+        ResolveIdle(distance, currentAttackRange, directionToPlayer);
+    }
+
+    private void FaceTowards(Vector3 direction)
+    {
+        if (direction.sqrMagnitude <= 0.0001f)
+        {
+            return;
+        }
+
+        Quaternion targetRotation = Quaternion.LookRotation(direction, Vector3.up);
+        transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, turnSpeed * Time.deltaTime);
     }
 
     private void StartAttack()
@@ -189,17 +353,18 @@ public class SimpleEnemyController : MonoBehaviour
         float hitDelay = Mathf.Clamp(attackHitDelay, 0.01f, animationDuration);
         float recoveryDuration = Mathf.Max(0f, attackRecoveryDuration);
 
-        _isMoving = false;
-        _attackInProgress = true;
         _pendingAttackDamage = true;
         _lastAttackStartedAt = Time.time;
         _attackDamageAt = Time.time + hitDelay;
         _attackRecoverUntil = Time.time + animationDuration + recoveryDuration;
-        _nextAttackTime = _attackRecoverUntil + attackCooldown * _attackCooldownMultiplier;
+        _nextAttackTime = _attackRecoverUntil + attackCooldown * _attackCooldownMultiplier * _lightZoneAttackCooldownMultiplier;
+        TransitionToState(EnemyState.Attacking);
     }
 
     private void HandleDeath(CombatantHealth health)
     {
+        TransitionToState(EnemyState.Dead);
+
         foreach (Collider colliderComponent in GetComponentsInChildren<Collider>())
         {
             colliderComponent.enabled = false;
@@ -207,6 +372,17 @@ public class SimpleEnemyController : MonoBehaviour
 
         OnDefeated?.Invoke(this);
         StartCoroutine(FadeOutAndDestroy());
+    }
+
+    private void TransitionToState(EnemyState nextState)
+    {
+        if (CurrentState == nextState)
+        {
+            return;
+        }
+
+        CurrentState = nextState;
+        OnStateChanged?.Invoke(this, CurrentState);
     }
 
     private void EnsureColliderDefaults()

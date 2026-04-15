@@ -4,6 +4,8 @@ public class PickupInteractable : InteractableBase
 {
     [SerializeField] private string itemId = "old_token";
     [SerializeField] private string inventoryCategory = "遗物";
+    [SerializeField] private Sprite inventoryIcon;
+    [SerializeField] private WeaponData weaponData;
     [TextArea(2, 4)]
     [SerializeField] private string inventoryDescription;
     [SerializeField] private string pickupSpeaker = "伊尔萨恩";
@@ -16,7 +18,7 @@ public class PickupInteractable : InteractableBase
     private bool _pickupEnabled = true;
 
     public string ItemId => string.IsNullOrWhiteSpace(itemId) ? string.Empty : itemId.Trim();
-    public bool IsCollected => _picked || ChapterState.HasItem(itemId);
+    public bool IsCollected => _picked || (GameStateHub.Instance != null && GameStateHub.Instance.HasCollectedItem(itemId));
 
     private void Awake()
     {
@@ -43,7 +45,9 @@ public class PickupInteractable : InteractableBase
         string newInventoryCategory = null,
         string newInventoryDescription = null,
         string newPickupSpeaker = null,
-        string[] newPickupLines = null)
+        string[] newPickupLines = null,
+        Sprite newInventoryIcon = null,
+        WeaponData newWeaponData = null)
     {
         if (!string.IsNullOrWhiteSpace(newItemId))
         {
@@ -66,6 +70,16 @@ public class PickupInteractable : InteractableBase
         if (!string.IsNullOrWhiteSpace(newPickupSpeaker))
         {
             pickupSpeaker = newPickupSpeaker.Trim();
+        }
+
+        if (newInventoryIcon != null)
+        {
+            inventoryIcon = newInventoryIcon;
+        }
+
+        if (newWeaponData != null)
+        {
+            weaponData = newWeaponData;
         }
 
         if (newPickupLines != null && newPickupLines.Length > 0)
@@ -106,7 +120,7 @@ public class PickupInteractable : InteractableBase
         }
 
         Debug.Log($"[PickupInteractable] Picked item: {itemId}");
-        ChapterState.CollectItem(itemId);
+        GameStateHub.Instance?.CollectItem(itemId);
 
         if (pickupLines != null && pickupLines.Length > 0 && !SimpleDialogueUI.IsOpen)
         {
@@ -155,7 +169,7 @@ public class PickupInteractable : InteractableBase
 
     private void RefreshCollectedState()
     {
-        _picked = ChapterState.HasItem(itemId);
+        _picked = GameStateHub.Instance != null && GameStateHub.Instance.HasCollectedItem(itemId);
         if (_picked)
         {
             promptText = "已拾取";
@@ -166,7 +180,13 @@ public class PickupInteractable : InteractableBase
 
     private void RegisterInventoryDefinition()
     {
-        InventoryItemCatalog.RegisterDefinition(itemId, DisplayName, inventoryDescription, inventoryCategory);
+        InventoryItemCatalog.RegisterDefinition(
+            itemId,
+            DisplayName,
+            inventoryDescription,
+            inventoryCategory,
+            inventoryIcon != null ? inventoryIcon : weaponData != null ? weaponData.Icon : null,
+            weaponData);
     }
 
     private void ApplyCollectedState()

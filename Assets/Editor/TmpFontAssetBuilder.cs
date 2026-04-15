@@ -8,46 +8,97 @@ using UnityEngine.TextCore.LowLevel;
 
 public static class TmpFontAssetBuilder
 {
-    private const int PreferredSamplingPointSize = 384;
-    private const int PreferredAtlasPadding = 10;
-    private const int PreferredAtlasSize = 8192;
+    private const int PreferredSamplingPointSize = 120;
+    private const int PreferredAtlasPadding = 9;
+    private const int PreferredAtlasSize = 2048;
     private const string HiraginoSourceFontPath = "Assets/Resources/Fonts/HiraginoSansGB.ttc";
     private const string BodyFontAssetPath = "Assets/Resources/Fonts/TMP/Hiragino Sans GB UI Body SDF.asset";
     private const string DisplayFontAssetPath = "Assets/Resources/Fonts/TMP/Hiragino Sans GB UI Display SDF.asset";
-    private static readonly string[] ProjectTextExtensions =
-    {
-        ".cs",
-        ".txt",
-        ".md",
-        ".json",
-        ".yaml",
-        ".yml",
-        ".asset",
-        ".unity",
-        ".prefab",
-        ".uss",
-        ".uxml"
-    };
-
     private const string CoreUiCharacters =
         "0123456789" +
         "ABCDEFGHIJKLMNOPQRSTUVWXYZ" +
         "abcdefghijklmnopqrstuvwxyz" +
-        "，。！？；：、（）【】《》〈〉“”‘’—…·+-=%/\\\\|_#@&*~^$<>{}[]'\"`" +
-        "伊尔萨恩人物背包状态目标探索记录当前任务生命近战攻击封印烛台灰烬客厅誓牌裂痕客厅像被烧毁过却又被谁按原样拼了回来这间不像更像是有人把整层的灰都按在了它上面一路往右边延过去第一盏大概就在前面继续关闭选择回应交互检查拾取离开进入返回确认取消";
+        ".,!?;:()[]<>+-=%/\\\\|_#@&*~^$'\"`";
+    private static readonly string[] CharacterSourceExtensions =
+    {
+        ".cs",
+        ".asset",
+        ".prefab",
+        ".unity",
+        ".txt",
+        ".json",
+        ".md",
+        ".yarn"
+    };
+    private static readonly char[] RequiredValidationCharacters = { '你', '灰', '客', '厅', '选', '择', '继', '续', '生', '命' };
 
     [MenuItem("Tools/DarkVillage/Build TMP Fonts")]
     public static void BuildRuntimeFonts()
     {
         AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
-        BuildFontAsset(HiraginoSourceFontPath, BodyFontAssetPath, "Hiragino Sans GB UI Body SDF");
-        BuildFontAsset(HiraginoSourceFontPath, DisplayFontAssetPath, "Hiragino Sans GB UI Display SDF");
+        string prebakedCharacters = CollectPrebakedCharacters();
+        EnsureFontAsset(HiraginoSourceFontPath, BodyFontAssetPath, "Hiragino Sans GB UI Body SDF", prebakedCharacters);
+        EnsureFontAsset(HiraginoSourceFontPath, DisplayFontAssetPath, "Hiragino Sans GB UI Display SDF", prebakedCharacters);
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
         Debug.Log("[TmpFontAssetBuilder] Hiragino Sans GB TMP fonts rebuilt.");
     }
 
-    private static void BuildFontAsset(string sourceFontPath, string targetAssetPath, string fontAssetName)
+    [MenuItem("Tools/DarkVillage/Report TMP Missing Characters")]
+    public static void ReportMissingCharacters()
+    {
+        AssetDatabase.ImportAsset(HiraginoSourceFontPath, ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
+        Font sourceFont = AssetDatabase.LoadAssetAtPath<Font>(HiraginoSourceFontPath);
+        if (sourceFont == null)
+        {
+            throw new FileNotFoundException($"Could not load font at path: {HiraginoSourceFontPath}");
+        }
+
+        string characters = CollectPrebakedCharacters();
+        FontEngine.InitializeFontEngine();
+        FontEngineError loadResult = FontEngine.LoadFontFace(sourceFont, PreferredSamplingPointSize);
+        if (loadResult != FontEngineError.Success)
+        {
+            throw new IOException($"Could not load font face for {sourceFont.name}: {loadResult}");
+        }
+
+        StringBuilder missingCharacters = new StringBuilder();
+        StringBuilder missingCodePoints = new StringBuilder();
+        for (int i = 0; i < characters.Length; i++)
+        {
+            char character = characters[i];
+            if (FontEngine.TryGetGlyphIndex(character, out uint glyphIndex) && glyphIndex != 0)
+            {
+                continue;
+            }
+
+            missingCharacters.Append(character);
+            if (missingCodePoints.Length > 0)
+            {
+                missingCodePoints.Append(", ");
+            }
+
+            missingCodePoints.Append("U+");
+            missingCodePoints.Append(((int)character).ToString("X4"));
+        }
+
+        Debug.Log($"[TmpFontAssetBuilder] Missing characters ({missingCharacters.Length}): {missingCharacters}");
+        Debug.Log($"[TmpFontAssetBuilder] Missing code points: {missingCodePoints}");
+    }
+
+    private static void EnsureFontAsset(string sourceFontPath, string targetAssetPath, string fontAssetName, string prebakedCharacters)
+    {
+        TMP_FontAsset existing = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(targetAssetPath);
+        if (IsReadyFontAsset(existing))
+        {
+            SetClearDynamicDataOnBuild(existing, false);
+            return;
+        }
+
+        BuildFontAsset(sourceFontPath, targetAssetPath, fontAssetName, prebakedCharacters);
+    }
+
+    private static void BuildFontAsset(string sourceFontPath, string targetAssetPath, string fontAssetName, string prebakedCharacters)
     {
         AssetDatabase.ImportAsset(sourceFontPath, ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
         Font sourceFont = AssetDatabase.LoadAssetAtPath<Font>(sourceFontPath);
@@ -71,7 +122,7 @@ public static class TmpFontAssetBuilder
             sourceFont,
             PreferredSamplingPointSize,
             PreferredAtlasPadding,
-            GlyphRenderMode.SDF16,
+            GlyphRenderMode.SDFAA,
             PreferredAtlasSize,
             PreferredAtlasSize,
             AtlasPopulationMode.Dynamic,
@@ -80,9 +131,9 @@ public static class TmpFontAssetBuilder
         fontAsset.name = fontAssetName;
         fontAsset.isMultiAtlasTexturesEnabled = true;
         fontAsset.atlasPopulationMode = AtlasPopulationMode.Dynamic;
+        SetClearDynamicDataOnBuild(fontAsset, false);
         AssetDatabase.CreateAsset(fontAsset, targetAssetPath);
 
-        string prebakedCharacters = CollectPrebakedCharacters();
         if (!string.IsNullOrEmpty(prebakedCharacters))
         {
             fontAsset.TryAddCharacters(prebakedCharacters, out string missingCharacters);
@@ -92,86 +143,142 @@ public static class TmpFontAssetBuilder
             }
         }
 
-        AddSubAssetIfNeeded(fontAsset.material, fontAsset, $"{fontAsset.name} Material");
+        Material material = AddSubAssetIfNeeded(fontAsset.material, fontAsset, $"{fontAsset.name} Material") as Material;
+        if (material != null)
+        {
+            fontAsset.material = material;
+            EditorUtility.SetDirty(material);
+        }
 
         if (fontAsset.atlasTextures != null)
         {
             for (int i = 0; i < fontAsset.atlasTextures.Length; i++)
             {
                 Texture2D atlasTexture = fontAsset.atlasTextures[i];
-                AddSubAssetIfNeeded(atlasTexture, fontAsset, $"{fontAsset.name} Atlas {i}");
+                Texture2D localAtlasTexture = AddSubAssetIfNeeded(atlasTexture, fontAsset, $"{fontAsset.name} Atlas {i}") as Texture2D;
+                if (localAtlasTexture != null)
+                {
+                    fontAsset.atlasTextures[i] = localAtlasTexture;
+                    EditorUtility.SetDirty(localAtlasTexture);
+                }
             }
         }
 
         EditorUtility.SetDirty(fontAsset);
+        AssetDatabase.SaveAssets();
         AssetDatabase.ImportAsset(targetAssetPath, ImportAssetOptions.ForceUpdate | ImportAssetOptions.ForceSynchronousImport);
     }
 
     private static string CollectPrebakedCharacters()
     {
         HashSet<char> seenCharacters = new HashSet<char>();
-        StringBuilder builder = new StringBuilder(CoreUiCharacters.Length + 2048);
+        StringBuilder builder = new StringBuilder(4096);
         AppendUniqueCharacters(builder, seenCharacters, CoreUiCharacters);
         AppendUniqueCharacters(builder, seenCharacters, "\n\r\t ");
-
-        CollectProjectCharacters(builder, seenCharacters, "Assets");
-        CollectProjectCharacters(builder, seenCharacters, "Docs");
-        CollectFileCharacters(builder, seenCharacters, "PROJECT_PROGRESS.txt");
+        AppendProjectCharacters(builder, seenCharacters);
 
         return builder.ToString();
     }
 
-    private static void CollectProjectCharacters(StringBuilder builder, HashSet<char> seenCharacters, string rootPath)
+    private static void AppendProjectCharacters(StringBuilder builder, HashSet<char> seenCharacters)
     {
-        if (!Directory.Exists(rootPath))
+        string[] assetPaths = AssetDatabase.GetAllAssetPaths();
+        for (int i = 0; i < assetPaths.Length; i++)
         {
-            return;
-        }
-
-        string[] files = Directory.GetFiles(rootPath, "*", SearchOption.AllDirectories);
-        for (int i = 0; i < files.Length; i++)
-        {
-            string extension = Path.GetExtension(files[i]);
-            if (!ShouldScanTextFile(extension))
+            string assetPath = assetPaths[i];
+            if (!assetPath.StartsWith("Assets/", System.StringComparison.Ordinal))
             {
                 continue;
             }
 
-            CollectFileCharacters(builder, seenCharacters, files[i]);
+            if (!HasSupportedTextExtension(assetPath))
+            {
+                continue;
+            }
+
+            if (assetPath.Contains("/Fonts/TMP/"))
+            {
+                continue;
+            }
+
+            string fullPath = Path.GetFullPath(assetPath);
+            if (!File.Exists(fullPath))
+            {
+                continue;
+            }
+
+            string content;
+            try
+            {
+                content = File.ReadAllText(fullPath);
+            }
+            catch (IOException)
+            {
+                continue;
+            }
+
+            AppendUsefulProjectCharacters(builder, seenCharacters, content);
         }
     }
 
-    private static void CollectFileCharacters(StringBuilder builder, HashSet<char> seenCharacters, string filePath)
+    private static bool HasSupportedTextExtension(string assetPath)
     {
-        if (!File.Exists(filePath))
+        string extension = Path.GetExtension(assetPath);
+        if (string.IsNullOrEmpty(extension))
         {
-            return;
+            return false;
         }
 
-        string content;
-        try
+        for (int i = 0; i < CharacterSourceExtensions.Length; i++)
         {
-            content = File.ReadAllText(filePath);
-        }
-        catch (IOException)
-        {
-            return;
-        }
-
-        AppendUniqueCharacters(builder, seenCharacters, content);
-    }
-
-    private static bool ShouldScanTextFile(string extension)
-    {
-        for (int i = 0; i < ProjectTextExtensions.Length; i++)
-        {
-            if (extension.Equals(ProjectTextExtensions[i], System.StringComparison.OrdinalIgnoreCase))
+            if (extension.Equals(CharacterSourceExtensions[i], System.StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
         }
 
         return false;
+    }
+
+    private static void AppendUsefulProjectCharacters(StringBuilder builder, HashSet<char> seenCharacters, string content)
+    {
+        if (string.IsNullOrEmpty(content))
+        {
+            return;
+        }
+
+        for (int i = 0; i < content.Length; i++)
+        {
+            char c = content[i];
+            if (!ShouldIncludeProjectCharacter(c))
+            {
+                continue;
+            }
+
+            if (!seenCharacters.Add(c))
+            {
+                continue;
+            }
+
+            builder.Append(c);
+        }
+    }
+
+    private static bool ShouldIncludeProjectCharacter(char c)
+    {
+        if (char.IsControl(c))
+        {
+            return c == '\n' || c == '\r' || c == '\t';
+        }
+
+        if (c <= 0x007F)
+        {
+            return !char.IsSurrogate(c);
+        }
+
+        return c >= 0x2E80 && c <= 0x9FFF
+            || c >= 0xF900 && c <= 0xFAFF
+            || c >= 0xFF00 && c <= 0xFFEF;
     }
 
     private static void AppendUniqueCharacters(StringBuilder builder, HashSet<char> seenCharacters, string content)
@@ -198,11 +305,11 @@ public static class TmpFontAssetBuilder
         }
     }
 
-    private static void AddSubAssetIfNeeded(Object subAsset, Object owner, string name)
+    private static Object AddSubAssetIfNeeded(Object subAsset, Object owner, string name)
     {
         if (subAsset == null || owner == null)
         {
-            return;
+            return null;
         }
 
         subAsset.name = name;
@@ -212,13 +319,69 @@ public static class TmpFontAssetBuilder
         if (string.IsNullOrEmpty(subAssetPath))
         {
             AssetDatabase.AddObjectToAsset(subAsset, owner);
+            return subAsset;
         }
-        else if (subAssetPath != ownerPath)
+
+        if (subAssetPath != ownerPath)
         {
             Object duplicated = Object.Instantiate(subAsset);
             duplicated.name = name;
             AssetDatabase.AddObjectToAsset(duplicated, owner);
+            return duplicated;
         }
+
+        return subAsset;
+    }
+
+    private static bool IsReadyFontAsset(TMP_FontAsset fontAsset)
+    {
+        if (fontAsset == null
+            || fontAsset.material == null
+            || fontAsset.atlasTextures == null
+            || fontAsset.atlasTextures.Length == 0
+            || fontAsset.atlasTextures[0] == null)
+        {
+            return false;
+        }
+
+        if (fontAsset.characterTable == null || fontAsset.characterTable.Count < 64)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < RequiredValidationCharacters.Length; i++)
+        {
+            if (!fontAsset.HasCharacter(RequiredValidationCharacters[i]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static void SetClearDynamicDataOnBuild(TMP_FontAsset fontAsset, bool value)
+    {
+        if (fontAsset == null)
+        {
+            return;
+        }
+
+        SerializedObject serializedObject = new SerializedObject(fontAsset);
+        SerializedProperty property = serializedObject.FindProperty("m_ClearDynamicDataOnBuild");
+        if (property == null)
+        {
+            return;
+        }
+
+        if (property.boolValue == value)
+        {
+            return;
+        }
+
+        property.boolValue = value;
+        serializedObject.ApplyModifiedPropertiesWithoutUndo();
+        EditorUtility.SetDirty(fontAsset);
     }
 
     private static void CreateFolderRecursive(string folderPath)

@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 96d9ec9ab460f4e968a1dde75e1bffcd, type: 3}
+  m_Name: MirrorCorridor_LandingMonologue
+  m_EditorClassIdentifier: Assembly-CSharp::DialogueNode
+  speakerName: "\u4F0A\u5C14\u8428\u6069"
+  lines:
+  - "\u7A7A\u6C14\u53D8\u7A20\u4E86\u3002\u7070\u70EC\u4E0D\u518D\u98D8\u843D\u2014\u2014\u5B83\u4EEC\u60AC\u6D6E\u7740\uFF0C\u50CF\u51DD\u56FA\u7684\u96E8\u3002"
+  - "\u8FD9\u4E00\u5C42\u66F4\u7A84\u3002\u5899\u58C1\u5728\u5F80\u91CC\u6324\u3002"
+  - "\u7B2C\u4E8C\u76CF\u706F\u2026\u2026\u85CF\u5728\u66F4\u6DF1\u7684\u5730\u65B9\u3002"
+  choices: []
+  onEnterEvents: []
+  completeObjectiveId: 
+  nextNode: {fileID: 0}

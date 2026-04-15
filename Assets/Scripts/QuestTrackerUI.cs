@@ -6,48 +6,107 @@ public class QuestTrackerUI : MonoBehaviour
 
     private float _completedBannerUntil;
     private string _completedBannerText = string.Empty;
-    private bool _lastCompletedState;
+    private QuestTracker _tracker;
 
-    private void Update()
+    private void OnEnable()
     {
-        QuestTracker tracker = QuestTracker.Instance;
-        if (tracker == null)
-        {
-            _lastCompletedState = false;
-            HideCanvasView();
-            return;
-        }
-
-        if (!_lastCompletedState && tracker.IsCompleted)
-        {
-            _completedBannerText = string.IsNullOrWhiteSpace(tracker.LastCompletedObjectiveText)
-                ? "当前目标已完成"
-                : tracker.LastCompletedObjectiveText;
-            _completedBannerUntil = Time.unscaledTime + Mathf.Max(0.5f, completedBannerDuration);
-        }
-
-        _lastCompletedState = tracker.IsCompleted;
-
-        SyncCanvasView(tracker);
+        QuestTracker.OnInstanceChanged += HandleTrackerInstanceChanged;
+        BindTracker(QuestTracker.Instance);
     }
 
     private void OnDisable()
     {
+        QuestTracker.OnInstanceChanged -= HandleTrackerInstanceChanged;
+        BindTracker(null);
         HideCanvasView();
     }
 
-    private void SyncCanvasView(QuestTracker tracker)
+    private void Update()
     {
+        if (string.IsNullOrWhiteSpace(_completedBannerText))
+        {
+            return;
+        }
+
+        if (Time.unscaledTime <= _completedBannerUntil)
+        {
+            return;
+        }
+
+        _completedBannerText = string.Empty;
+        SyncCanvasView();
+    }
+
+    private void HandleTrackerInstanceChanged(QuestTracker tracker)
+    {
+        BindTracker(tracker);
+    }
+
+    private void HandleObjectiveChanged(QuestTracker tracker)
+    {
+        SyncCanvasView();
+    }
+
+    private void HandleObjectiveCompleted(QuestTracker tracker)
+    {
+        if (tracker == null)
+        {
+            return;
+        }
+
+        _completedBannerText = string.IsNullOrWhiteSpace(tracker.LastCompletedObjectiveText)
+            ? "当前目标已完成"
+            : tracker.LastCompletedObjectiveText;
+        _completedBannerUntil = Time.unscaledTime + Mathf.Max(0.5f, completedBannerDuration);
+        SyncCanvasView();
+    }
+
+    private void BindTracker(QuestTracker tracker)
+    {
+        if (_tracker == tracker)
+        {
+            return;
+        }
+
+        if (_tracker != null)
+        {
+            _tracker.OnObjectiveChanged -= HandleObjectiveChanged;
+            _tracker.OnObjectiveCompleted -= HandleObjectiveCompleted;
+        }
+
+        _tracker = tracker;
+
+        if (_tracker != null)
+        {
+            _tracker.OnObjectiveChanged += HandleObjectiveChanged;
+            _tracker.OnObjectiveCompleted += HandleObjectiveCompleted;
+            SyncCanvasView();
+            return;
+        }
+
+        _completedBannerText = string.Empty;
+        _completedBannerUntil = 0f;
+        HideCanvasView();
+    }
+
+    private void SyncCanvasView()
+    {
+        if (_tracker == null)
+        {
+            HideCanvasView();
+            return;
+        }
+
         if (!UiBootstrap.TryGetHudView(out HudCanvasView hudView))
         {
             return;
         }
 
-        bool hasObjectiveText = !string.IsNullOrWhiteSpace(tracker.CurrentObjectiveText);
+        bool hasObjectiveText = !string.IsNullOrWhiteSpace(_tracker.CurrentObjectiveText);
         hudView.SetQuestPanel(
             hasObjectiveText,
-            tracker.IsCompleted ? "任务更新" : "当前目标",
-            tracker.CurrentObjectiveText);
+            _tracker.IsCompleted ? "任务更新" : "当前目标",
+            _tracker.CurrentObjectiveText);
 
         bool showBanner = !string.IsNullOrWhiteSpace(_completedBannerText) && Time.unscaledTime <= _completedBannerUntil;
         if (showBanner)
