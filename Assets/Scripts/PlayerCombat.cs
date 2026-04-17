@@ -24,7 +24,7 @@ public class PlayerCombat : MonoBehaviour
 
     [Header("Vitals")]
     [SerializeField] private int maxHealth = 6;
-    [SerializeField] private float deathReloadDelay = 1.25f;
+    [SerializeField] private float returnToMenuDelay = 1.25f;
 
     [Header("Hit Response")]
     [SerializeField] private float hitKnockbackForce = 4.4f;
@@ -324,18 +324,19 @@ public class PlayerCombat : MonoBehaviour
         }
 
         _reloadScheduled = true;
-        StartCoroutine(ReloadAfterDeath());
+        StartCoroutine(ReturnToMenuAfterDeath());
     }
 
-    private IEnumerator ReloadAfterDeath()
+    private IEnumerator ReturnToMenuAfterDeath()
     {
         if (SimpleDialogueUI.Instance != null && !SimpleDialogueUI.IsOpen)
         {
-            SimpleDialogueUI.Instance.Show("伊尔萨恩", "你被异化的残响压倒了。重新整理呼吸，再试一次。");
+            SimpleDialogueUI.Instance.Show("伊尔萨恩", "你被异化的残响压倒了。先退回门厅，让呼吸重新稳定下来。");
         }
 
-        yield return new WaitForSeconds(deathReloadDelay);
-        SceneLoader.ReloadCurrent();
+        yield return new WaitForSeconds(returnToMenuDelay);
+        DialogueEventSystem.ClearFlags();
+        SceneLoader.LoadMenu(saveBeforeLoad: false);
     }
 
     private void OnDrawGizmosSelected()

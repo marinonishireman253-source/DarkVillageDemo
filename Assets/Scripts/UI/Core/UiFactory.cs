@@ -47,8 +47,9 @@ public static class UiFactory
         scaler.referenceResolution = new Vector2(ReferenceWidth, ReferenceHeight);
         scaler.referencePixelsPerUnit = 100f;
         scaler.dynamicPixelsPerUnit = 2f;
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ConstantPixelSize;
-        scaler.scaleFactor = ComputeQuantizedScaleFactor();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+        scaler.matchWidthOrHeight = 0.5f;
     }
 
     public static RectTransform CreateRect(
@@ -188,20 +189,6 @@ public static class UiFactory
         rectTransform.sizeDelta = Vector2.zero;
         rectTransform.anchoredPosition = Vector2.zero;
         rectTransform.localScale = Vector3.one;
-    }
-
-    private static float ComputeQuantizedScaleFactor()
-    {
-        float widthScale = Screen.width / ReferenceWidth;
-        float heightScale = Screen.height / ReferenceHeight;
-        float rawScale = Mathf.Min(widthScale, heightScale);
-        if (rawScale >= 1f)
-        {
-            return Mathf.Max(1f, Mathf.Floor(rawScale));
-        }
-
-        float quantized = Mathf.Round(rawScale / UiScaleStep) * UiScaleStep;
-        return Mathf.Clamp(quantized, MinimumUiScale, 1f);
     }
 
     private static Vector2 RoundVector(Vector2 value)

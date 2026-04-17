@@ -25,21 +25,21 @@ public sealed class UiTheme : ScriptableObject
     [SerializeField] private Sprite primaryButtonSprite;
 
     [Header("Base Colors")]
-    [SerializeField] private Color charcoal = new Color32(0x0D, 0x10, 0x14, 0xFF);
-    [SerializeField] private Color slate = new Color32(0x1E, 0x23, 0x2A, 0xFF);
-    [SerializeField] private Color primaryText = new Color32(0xEE, 0xE8, 0xDD, 0xFF);
-    [SerializeField] private Color secondaryText = new Color32(0xBF, 0xC3, 0xC6, 0xFF);
-    [SerializeField] private Color brass = new Color32(0xC8, 0xA5, 0x6E, 0xFF);
-    [SerializeField] private Color dimBrass = new Color32(0x8C, 0x73, 0x50, 0xFF);
-    [SerializeField] private Color moss = new Color32(0x51, 0x65, 0x46, 0xFF);
-    [SerializeField] private Color ember = new Color32(0xA9, 0x4E, 0x3D, 0xFF);
-    [SerializeField] private Color fogShadow = new Color(0f, 0f, 0f, 0.42f);
+    [SerializeField] private Color charcoal = default;
+    [SerializeField] private Color slate = default;
+    [SerializeField] private Color primaryText = default;
+    [SerializeField] private Color secondaryText = default;
+    [SerializeField] private Color brass = default;
+    [SerializeField] private Color dimBrass = default;
+    [SerializeField] private Color moss = default;
+    [SerializeField] private Color ember = default;
+    [SerializeField] private Color fogShadow = default;
 
     [Header("Panel Colors")]
-    [SerializeField] private Color panelOuter = new Color(0.05f, 0.06f, 0.08f, 0.9f);
-    [SerializeField] private Color panelInner = new Color(0.12f, 0.14f, 0.17f, 0.82f);
-    [SerializeField] private Color choiceIdle = new Color(0.15f, 0.17f, 0.2f, 0.5f);
-    [SerializeField] private Color choiceSelected = new Color(0.79f, 0.67f, 0.45f, 0.38f);
+    [SerializeField] private Color panelOuter = default;
+    [SerializeField] private Color panelInner = default;
+    [SerializeField] private Color choiceIdle = default;
+    [SerializeField] private Color choiceSelected = default;
 
     [Header("Animation")]
     [SerializeField] private float fastFadeDuration = 0.16f;
@@ -80,6 +80,20 @@ public sealed class UiTheme : ScriptableObject
 
     public void EnsureRuntimeDefaults()
     {
+        if (charcoal == default) charcoal = UiColors.Charcoal;
+        if (slate == default) slate = UiColors.Slate;
+        if (primaryText == default) primaryText = UiColors.TextPrimary;
+        if (secondaryText == default) secondaryText = UiColors.TextSecondary;
+        if (brass == default) brass = UiColors.Brass;
+        if (dimBrass == default) dimBrass = UiColors.DimBrass;
+        if (moss == default) moss = UiColors.Moss;
+        if (ember == default) ember = UiColors.Ember;
+        if (fogShadow == default) fogShadow = UiColors.FogShadow;
+        if (panelOuter == default) panelOuter = UiColors.PanelOuter;
+        if (panelInner == default) panelInner = UiColors.PanelInner;
+        if (choiceIdle == default) choiceIdle = UiColors.ChoiceIdle;
+        if (choiceSelected == default) choiceSelected = UiColors.ChoiceSelected;
+
         if (!IsUsableFontAsset(bodyFontAsset))
         {
             bodyFontAsset = LoadBodyFont();

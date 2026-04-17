@@ -216,9 +216,18 @@ public sealed class DialogueCanvasView : MonoBehaviour
         dialogueCanvasGroup = UiFactory.GetOrAddCanvasGroup(dialoguePanelRoot.gameObject);
 
         UiFactory.CreateImage("DialogueShadow", dialoguePanelRoot, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(26f, 26f), new Vector2(18f, -18f), new Color(0f, 0f, 0f, 0.34f));
-        dialogueBackground = UiFactory.CreateImage("DialogueOuter", dialoguePanelRoot, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.03f, 0.04f, 0.06f, 0.94f));
+        dialogueBackground = UiComponentCatalog.CreateDialogueFrame(dialoguePanelRoot);
+        dialogueBackground.name = "DialogueOuter";
         RectTransform dialogueInner = UiFactory.CreateRect("DialogueInner", dialoguePanelRoot, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-14f, -14f), Vector2.zero);
-        UiFactory.CreateImage("DialogueFill", dialogueInner, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.08f, 0.1f, 0.14f, 0.96f));
+        UiFactory.CreateImage(
+            "DialogueFill",
+            dialogueInner,
+            Vector2.zero,
+            Vector2.one,
+            new Vector2(0.5f, 0.5f),
+            Vector2.zero,
+            Vector2.zero,
+            _theme.DialogueFrameSprite != null ? new Color(0.08f, 0.1f, 0.14f, 0.58f) : new Color(0.08f, 0.1f, 0.14f, 0.96f));
         UiFactory.CreateImage("Accent", dialogueInner, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f), new Vector2(3f, -26f), Vector2.zero, new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.88f));
 
         BuildPortrait(dialogueInner);
@@ -302,8 +311,21 @@ public sealed class DialogueCanvasView : MonoBehaviour
         choicesCanvasGroup = UiFactory.GetOrAddCanvasGroup(choicePanelRoot.gameObject);
         UiFactory.CreateImage("ChoiceShadow", choicePanelRoot, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(22f, 22f), new Vector2(14f, -14f), new Color(0f, 0f, 0f, 0.28f));
         choicesBackground = UiFactory.CreateImage("ChoiceOuter", choicePanelRoot, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.04f, 0.05f, 0.07f, 0.92f));
+        if (_theme.ChoicePanelSprite != null)
+        {
+            UiFactory.ApplySprite(choicesBackground, _theme.ChoicePanelSprite);
+            choicesBackground.color = Color.white;
+        }
         RectTransform choiceInner = UiFactory.CreateRect("ChoiceInner", choicePanelRoot, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-12f, -12f), Vector2.zero);
-        UiFactory.CreateImage("ChoiceFill", choiceInner, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.08f, 0.1f, 0.14f, 0.96f));
+        UiFactory.CreateImage(
+            "ChoiceFill",
+            choiceInner,
+            Vector2.zero,
+            Vector2.one,
+            new Vector2(0.5f, 0.5f),
+            Vector2.zero,
+            Vector2.zero,
+            _theme.ChoicePanelSprite != null ? new Color(0.08f, 0.1f, 0.14f, 0.54f) : new Color(0.08f, 0.1f, 0.14f, 0.96f));
         UiFactory.CreateImage("ChoiceAccent", choiceInner, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f), new Vector2(3f, -24f), Vector2.zero, new Color(_theme.Moss.r, _theme.Moss.g, _theme.Moss.b, 0.9f));
 
         choicesPromptText = UiFactory.CreateText(
@@ -354,7 +376,9 @@ public sealed class DialogueCanvasView : MonoBehaviour
         portraitRoot = portraitFrame.gameObject;
 
         portraitFrameDecoration = UiFactory.CreateImage("PortraitOuter", portraitFrame, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.32f));
+        UiComponentCatalog.ApplyChrome(portraitFrameDecoration, _theme.PortraitFrameSprite, new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.32f));
         portraitMatteFill = UiFactory.CreateImage("PortraitFrameFill", portraitFrame, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-8f, -8f), Vector2.zero, new Color(0.09f, 0.1f, 0.12f, 0.95f));
+        UiComponentCatalog.ApplyChrome(portraitMatteFill, _theme.InteractionPromptSprite, new Color(0.09f, 0.1f, 0.12f, 0.95f));
 
         RectTransform artworkMask = UiFactory.CreateRect(
             "PortraitArtworkMask",
@@ -401,6 +425,7 @@ public sealed class DialogueCanvasView : MonoBehaviour
             new Vector2(206f, 34f),
             new Vector2(0f, 18f),
             new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.18f));
+        UiComponentCatalog.ApplyChrome(portraitNamePlate, _theme.KeycapBadgeSprite, new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.18f));
         portraitNameText = UiFactory.CreateText(
             "PortraitName",
             portraitNamePlate.transform,
@@ -438,6 +463,8 @@ public sealed class DialogueCanvasView : MonoBehaviour
         layoutElement.preferredHeight = 76f;
 
         Image background = UiFactory.CreateImage("Background", rowRoot, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(1f, 1f, 1f, 0.05f));
+        UiComponentCatalog.ApplyChrome(background, _theme.ChoicePanelSprite, new Color(1f, 1f, 1f, 0.05f));
+        UiFactory.CreateImage("ChoiceAccent", rowRoot, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f), new Vector2(2f, -18f), Vector2.zero, new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.48f)).raycastTarget = false;
         Button button = rowRoot.gameObject.AddComponent<Button>();
         button.targetGraphic = background;
 

@@ -158,10 +158,14 @@ public sealed class InventoryCanvasView : MonoBehaviour
             Vector2.zero);
 
         UiFactory.CreateImage("PanelShadow", _panel, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(34f, 34f), new Vector2(20f, -20f), new Color(0f, 0f, 0f, 0.34f));
-        UiFactory.CreateImage("PanelOuter", _panel, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.03f, 0.04f, 0.06f, 0.95f));
-        RectTransform inner = UiFactory.CreateRect("PanelInner", _panel, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-14f, -14f), Vector2.zero);
-        UiFactory.CreateImage("PanelFill", inner, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.08f, 0.1f, 0.14f, 0.97f));
-        UiFactory.CreateImage("LeftAccent", inner, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f), new Vector2(4f, -34f), Vector2.zero, new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.88f));
+        RectTransform inner = UiComponentCatalog.BuildPanelShell(
+            _panel,
+            new Color(0.03f, 0.04f, 0.06f, 0.95f),
+            _theme.ModalFrameSprite,
+            new Color(0.08f, 0.1f, 0.14f, 0.97f),
+            _theme.ChoicePanelSprite,
+            new Vector2(-14f, -14f));
+        UiComponentCatalog.CreateAccentLine("LeftAccent", inner, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f), new Vector2(4f, -34f), Vector2.zero, new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.88f));
 
         TMP_Text eyebrow = UiFactory.CreateText(
             "Eyebrow",
@@ -172,7 +176,7 @@ public sealed class InventoryCanvasView : MonoBehaviour
             new Vector2(-68f, 24f),
             new Vector2(34f, -24f),
             _theme.DisplayFont,
-            13,
+            UiFontSize.Small,
             FontStyle.Normal,
             TextAnchor.MiddleLeft,
             _theme.Brass);
@@ -187,7 +191,7 @@ public sealed class InventoryCanvasView : MonoBehaviour
             new Vector2(-68f, 42f),
             new Vector2(34f, -56f),
             _theme.DisplayFont,
-            34,
+            UiFontSize.PanelTitle,
             FontStyle.Bold,
             TextAnchor.MiddleLeft,
             _theme.PrimaryText);
@@ -201,7 +205,7 @@ public sealed class InventoryCanvasView : MonoBehaviour
             new Vector2(-68f, 30f),
             new Vector2(34f, -98f),
             _theme.BodyFont,
-            18,
+            UiFontSize.Section,
             FontStyle.Normal,
             TextAnchor.MiddleLeft,
             _theme.SecondaryText);
@@ -243,7 +247,7 @@ public sealed class InventoryCanvasView : MonoBehaviour
             new Vector2(-68f, 26f),
             new Vector2(34f, 28f),
             _theme.BodyFont,
-            14,
+            UiFontSize.Body,
             FontStyle.Normal,
             TextAnchor.MiddleLeft,
             new Color(_theme.PrimaryText.r, _theme.PrimaryText.g, _theme.PrimaryText.b, 0.76f));
@@ -261,8 +265,10 @@ public sealed class InventoryCanvasView : MonoBehaviour
             new Vector2(0.5f, 1f),
             new Vector2(214f, 214f),
             new Vector2(0f, -84f));
-        UiFactory.CreateImage("PortraitOuter", portraitCircle, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.34f));
-        UiFactory.CreateImage("PortraitInner", portraitCircle, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-8f, -8f), Vector2.zero, new Color(0.11f, 0.12f, 0.16f, 0.98f));
+        Image portraitOuter = UiFactory.CreateImage("PortraitOuter", portraitCircle, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.34f));
+        UiComponentCatalog.ApplyChrome(portraitOuter, _theme.PortraitFrameSprite, new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.34f));
+        Image portraitInner = UiFactory.CreateImage("PortraitInner", portraitCircle, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-8f, -8f), Vector2.zero, new Color(0.11f, 0.12f, 0.16f, 0.98f));
+        UiComponentCatalog.ApplyChrome(portraitInner, _theme.InteractionPromptSprite, new Color(0.11f, 0.12f, 0.16f, 0.98f));
         Image silhouette = UiFactory.CreateImage("Silhouette", portraitCircle, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(84f, 118f), new Vector2(0f, 8f), new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.2f));
         silhouette.rectTransform.localScale = new Vector3(1f, 1.15f, 1f);
 
@@ -313,6 +319,7 @@ public sealed class InventoryCanvasView : MonoBehaviour
             new Vector2(92f, 92f),
             new Vector2(20f, -82f),
             new Color(1f, 1f, 1f, 0.06f));
+        UiComponentCatalog.ApplyChrome(slotBackground, _theme.KeycapBadgeSprite, new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.28f));
         Image slotIcon = UiFactory.CreateImage(
             "WeaponSlotIcon",
             slotBackground.transform,
@@ -415,9 +422,9 @@ public sealed class InventoryCanvasView : MonoBehaviour
             new Vector2(0.5f, 1f),
             new Vector2(-36f, 26f),
             new Vector2(0f, -60f));
-        UiFactory.CreateText("IndexHeader", listHeader, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(80f, 22f), new Vector2(0f, 0f), _theme.DisplayFont, 12, FontStyle.Normal, TextAnchor.MiddleLeft, new Color(_theme.PrimaryText.r, _theme.PrimaryText.g, _theme.PrimaryText.b, 0.52f)).text = "编号";
-        UiFactory.CreateText("NameHeader", listHeader, new Vector2(0f, 0.5f), new Vector2(1f, 0.5f), new Vector2(0f, 0.5f), new Vector2(-220f, 22f), new Vector2(88f, 0f), _theme.DisplayFont, 12, FontStyle.Normal, TextAnchor.MiddleLeft, new Color(_theme.PrimaryText.r, _theme.PrimaryText.g, _theme.PrimaryText.b, 0.52f)).text = "名称";
-        UiFactory.CreateText("CategoryHeader", listHeader, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(140f, 22f), new Vector2(0f, 0f), _theme.DisplayFont, 12, FontStyle.Normal, TextAnchor.MiddleRight, new Color(_theme.PrimaryText.r, _theme.PrimaryText.g, _theme.PrimaryText.b, 0.52f)).text = "分类";
+        UiFactory.CreateText("IndexHeader", listHeader, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(80f, 22f), new Vector2(0f, 0f), _theme.DisplayFont, UiFontSize.Caption, FontStyle.Normal, TextAnchor.MiddleLeft, new Color(_theme.PrimaryText.r, _theme.PrimaryText.g, _theme.PrimaryText.b, 0.52f)).text = "编号";
+        UiFactory.CreateText("NameHeader", listHeader, new Vector2(0f, 0.5f), new Vector2(1f, 0.5f), new Vector2(0f, 0.5f), new Vector2(-220f, 22f), new Vector2(88f, 0f), _theme.DisplayFont, UiFontSize.Caption, FontStyle.Normal, TextAnchor.MiddleLeft, new Color(_theme.PrimaryText.r, _theme.PrimaryText.g, _theme.PrimaryText.b, 0.52f)).text = "名称";
+        UiFactory.CreateText("CategoryHeader", listHeader, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(140f, 22f), new Vector2(0f, 0f), _theme.DisplayFont, UiFontSize.Caption, FontStyle.Normal, TextAnchor.MiddleRight, new Color(_theme.PrimaryText.r, _theme.PrimaryText.g, _theme.PrimaryText.b, 0.52f)).text = "分类";
 
         RectTransform rowContainer = UiFactory.CreateRect("RowContainer", listCard, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
         rowContainer.offsetMin = new Vector2(18f, 18f);
@@ -550,8 +557,8 @@ public sealed class InventoryCanvasView : MonoBehaviour
             InventoryItemCatalog.ItemViewData item = items[itemIndex];
             bool isSelected = itemIndex == clampedSelection;
             row.Background.color = isSelected
-                ? new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.28f)
-                : new Color(1f, 1f, 1f, 0.05f);
+                ? new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.34f)
+                : new Color(1f, 1f, 1f, 0.12f);
             row.IndexText.text = (itemIndex + 1).ToString("00");
             row.NameText.text = item.DisplayName;
             row.CategoryText.text = item.Category;
@@ -583,6 +590,7 @@ public sealed class InventoryCanvasView : MonoBehaviour
             new Vector2(196f, 52f),
             new Vector2(xPosition, 0f),
             new Color(1f, 1f, 1f, 0.05f));
+        UiComponentCatalog.ApplyChrome(background, _theme.PrimaryButtonSprite, new Color(1f, 1f, 1f, 0.05f));
         TMP_Text text = UiFactory.CreateText(
             label + "Label",
             background.transform,
@@ -592,7 +600,7 @@ public sealed class InventoryCanvasView : MonoBehaviour
             new Vector2(-24f, -10f),
             Vector2.zero,
             _theme.DisplayFont,
-            18,
+            UiFontSize.Section,
             FontStyle.Bold,
             TextAnchor.MiddleCenter,
             _theme.SecondaryText);
@@ -607,8 +615,8 @@ public sealed class InventoryCanvasView : MonoBehaviour
     private void ApplyTab(TabWidgets tab, bool active)
     {
         tab.Background.color = active
-            ? new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.28f)
-            : new Color(1f, 1f, 1f, 0.05f);
+            ? new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.34f)
+            : new Color(1f, 1f, 1f, 0.12f);
         tab.Text.color = active ? _theme.PrimaryText : _theme.SecondaryText;
     }
 
@@ -625,7 +633,8 @@ public sealed class InventoryCanvasView : MonoBehaviour
         LayoutElement layoutElement = rowRoot.gameObject.AddComponent<LayoutElement>();
         layoutElement.preferredHeight = 64f;
 
-        Image background = UiFactory.CreateImage("Background", rowRoot, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(1f, 1f, 1f, 0.05f));
+        Image background = UiFactory.CreateImage("Background", rowRoot, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(1f, 1f, 1f, 0.12f));
+        UiComponentCatalog.ApplyChrome(background, _theme.ChoicePanelSprite, new Color(1f, 1f, 1f, 0.12f));
 
         TMP_Text indexText = UiFactory.CreateText(
             "Index",
@@ -636,7 +645,7 @@ public sealed class InventoryCanvasView : MonoBehaviour
             new Vector2(74f, 22f),
             new Vector2(16f, 0f),
             _theme.DisplayFont,
-            14,
+            UiFontSize.Body,
             FontStyle.Bold,
             TextAnchor.MiddleLeft,
             _theme.Brass);
@@ -650,7 +659,7 @@ public sealed class InventoryCanvasView : MonoBehaviour
             new Vector2(-220f, 24f),
             new Vector2(90f, 0f),
             _theme.BodyFont,
-            18,
+            UiFontSize.Section,
             FontStyle.Bold,
             TextAnchor.MiddleLeft,
             _theme.PrimaryText);
@@ -664,7 +673,7 @@ public sealed class InventoryCanvasView : MonoBehaviour
             new Vector2(140f, 22f),
             new Vector2(-16f, 0f),
             _theme.BodyFont,
-            15,
+            UiFontSize.Label,
             FontStyle.Normal,
             TextAnchor.MiddleRight,
             _theme.SecondaryText);
@@ -689,10 +698,14 @@ public sealed class InventoryCanvasView : MonoBehaviour
         Vector2 anchoredPosition)
     {
         RectTransform root = UiFactory.CreateRect(name, parent, anchorMin, anchorMax, pivot, sizeDelta, anchoredPosition);
-        UiFactory.CreateImage("Outer", root, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.04f, 0.05f, 0.07f, 0.92f));
-        RectTransform inner = UiFactory.CreateRect("Inner", root, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-10f, -10f), Vector2.zero);
-        UiFactory.CreateImage("Fill", inner, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.09f, 0.11f, 0.15f, 0.95f));
-        UiFactory.CreateImage("Accent", inner, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f), new Vector2(2f, -24f), Vector2.zero, new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.84f));
+        RectTransform inner = UiComponentCatalog.BuildPanelShell(
+            root,
+            new Color(0.04f, 0.05f, 0.07f, 0.92f),
+            _theme.ChoicePanelSprite,
+            new Color(0.09f, 0.11f, 0.15f, 0.95f),
+            _theme.InteractionPromptSprite,
+            new Vector2(-10f, -10f));
+        UiComponentCatalog.CreateAccentLine("Accent", inner, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f), new Vector2(2f, -24f), Vector2.zero, new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.84f));
         return root;
     }
 
@@ -706,8 +719,14 @@ public sealed class InventoryCanvasView : MonoBehaviour
         Vector2 anchoredPosition)
     {
         RectTransform root = UiFactory.CreateRect(name, parent, anchorMin, anchorMax, pivot, sizeDelta, anchoredPosition);
-        UiFactory.CreateImage("Fill", root, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(1f, 1f, 1f, 0.04f));
-        UiFactory.CreateImage("TopLine", root, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), new Vector2(-24f, 1.5f), new Vector2(0f, -1f), new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.42f));
+        RectTransform inner = UiComponentCatalog.BuildPanelShell(
+            root,
+            new Color(1f, 1f, 1f, 0.08f),
+            _theme.InteractionPromptSprite,
+            new Color(1f, 1f, 1f, 0.08f),
+            _theme.InteractionPromptSprite,
+            Vector2.zero);
+        UiComponentCatalog.CreateAccentLine("TopLine", inner, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), new Vector2(-24f, 1.5f), new Vector2(0f, -1f), new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.42f));
         return root;
     }
 
@@ -746,4 +765,5 @@ public sealed class InventoryCanvasView : MonoBehaviour
             TextAnchor.MiddleLeft,
             _theme.PrimaryText);
     }
+
 }

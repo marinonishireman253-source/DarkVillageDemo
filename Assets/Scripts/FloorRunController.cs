@@ -127,4 +127,13 @@ public abstract class FloorRunController : MonoBehaviour
         DialogueEventSystem.ClearFlags();
         SceneLoader.ReloadCurrent();
     }
+
+    protected void ContinueFromCompletedFloor()
+    {
+        Time.timeScale = 1f;
+        GameStateHub.SelectNextFloorAfterCompletion(GameStateHub.CurrentFloorIndexRuntime);
+        GameStateHub.Instance?.ResetRuntimeState();
+        DialogueEventSystem.ClearFlags();
+        SceneLoader.ReloadCurrent();
+    }
 }

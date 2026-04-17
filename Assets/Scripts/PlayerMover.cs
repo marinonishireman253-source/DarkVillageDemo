@@ -4,6 +4,7 @@ using UnityEngine.InputSystem;
 
 [RequireComponent(typeof(CapsuleCollider))]
 [RequireComponent(typeof(Rigidbody))]
+[RequireComponent(typeof(PlayerJumpMotor))]
 public class PlayerMover : MonoBehaviour
 {
     public enum MovementMode
@@ -30,6 +31,7 @@ public class PlayerMover : MonoBehaviour
     [SerializeField] private string actionMapName = "Player";
     [SerializeField] private string moveActionName = "Move";
     [SerializeField] private string sprintActionName = "Sprint";
+    [SerializeField] private string jumpActionName = "Jump";
     [SerializeField] private string interactActionName = "Interact";
 
     [Header("Interaction")]
@@ -39,15 +41,18 @@ public class PlayerMover : MonoBehaviour
 
     public Vector3 Velocity => _currentVelocity;
     public Vector3 ExternalVelocity => _externalVelocity;
+    public bool IsGrounded => _jumpMotor == null || _jumpMotor.IsGrounded;
     public bool HasInteractableTarget => _currentInteractable != null;
     public IInteractable CurrentInteractable => _currentInteractable;
     public bool IsSprintActive => !UiStateCoordinator.BlocksPlayerMovementForMode(_currentUiMode) && IsSprinting() && _moveInput.sqrMagnitude > 0.0001f;
     public bool IsControlLocked => Time.time < _controlLockedUntil;
+    public float VerticalVelocity => _jumpMotor != null ? _jumpMotor.VerticalVelocity : 0f;
 
     public event Action<PlayerMover, IInteractable> OnInteractableTargetChanged;
 
     private InputAction _moveAction;
     private InputAction _sprintAction;
+    private InputAction _jumpAction;
     private InputAction _interactAction;
 
     private Vector2 _moveInput;
@@ -68,9 +73,16 @@ public class PlayerMover : MonoBehaviour
     private float _lightZoneInteractionMultiplier = 1f;
     private UiStateCoordinator _stateCoordinator;
     private UiStateCoordinator.UiMode _currentUiMode = UiStateCoordinator.UiMode.Exploration;
+    private PlayerJumpMotor _jumpMotor;
 
     private void Awake()
     {
+        _jumpMotor = GetComponent<PlayerJumpMotor>();
+        if (_jumpMotor == null)
+        {
+            _jumpMotor = gameObject.AddComponent<PlayerJumpMotor>();
+        }
+
         LocalInstance = this;
         OnLocalInstanceChanged?.Invoke(this);
     }
@@ -92,6 +104,7 @@ public class PlayerMover : MonoBehaviour
         _useGroundPlaneBounds = false;
         _currentVelocity = Vector3.zero;
         _externalVelocity = Vector3.zero;
+        _jumpMotor?.SyncToPosition(transform.position);
     }
 
     public void ConfigureGroundPlane(Vector2 xRange, Vector2 zRange, bool useCameraRelativeMovement)
@@ -104,6 +117,7 @@ public class PlayerMover : MonoBehaviour
         _useSideScrollHorizontalRange = false;
         _currentVelocity = Vector3.zero;
         _externalVelocity = Vector3.zero;
+        _jumpMotor?.SyncToPosition(transform.position);
     }
 
     public void ConfigureSideScroller(float lockedDepth, Vector2 horizontalRange)
@@ -120,6 +134,7 @@ public class PlayerMover : MonoBehaviour
         Vector3 position = transform.position;
         position.z = lockedDepth;
         transform.position = position;
+        _jumpMotor?.SyncToPosition(transform.position);
     }
 
     public void AddImpulse(Vector3 impulse)
@@ -172,6 +187,8 @@ public class PlayerMover : MonoBehaviour
         BindStateCoordinator(UiStateCoordinator.Instance);
         BindInput();
         EnableActions();
+        SyncLightZoneEffects();
+        _jumpMotor?.SyncToPosition(transform.position);
     }
 
     private void OnDisable()
@@ -194,6 +211,7 @@ public class PlayerMover : MonoBehaviour
         }
 
         RefreshMoveInput();
+        ProcessJumpInput();
 
         if (UiStateCoordinator.BlocksPlayerMovementForMode(_currentUiMode))
         {
@@ -265,6 +283,7 @@ public class PlayerMover : MonoBehaviour
 
         _moveAction = actionMap.FindAction(moveActionName, false);
         _sprintAction = actionMap.FindAction(sprintActionName, false);
+        _jumpAction = actionMap.FindAction(jumpActionName, false);
         _interactAction = actionMap.FindAction(interactActionName, false);
 
         if (_moveAction == null)
@@ -292,6 +311,7 @@ public class PlayerMover : MonoBehaviour
 
         _moveAction = null;
         _sprintAction = null;
+        _jumpAction = null;
         _interactAction = null;
     }
 
@@ -299,6 +319,7 @@ public class PlayerMover : MonoBehaviour
     {
         _moveAction?.Enable();
         _sprintAction?.Enable();
+        _jumpAction?.Enable();
         _interactAction?.Enable();
     }
 
@@ -306,6 +327,7 @@ public class PlayerMover : MonoBehaviour
     {
         _moveAction?.Disable();
         _sprintAction?.Disable();
+        _jumpAction?.Disable();
         _interactAction?.Disable();
     }
 
@@ -338,15 +360,22 @@ public class PlayerMover : MonoBehaviour
         _currentVelocity = Vector3.MoveTowards(_currentVelocity, targetVelocity, rate * deltaTime);
         _externalVelocity = Vector3.MoveTowards(_externalVelocity, Vector3.zero, externalVelocityDecay * deltaTime);
         Vector3 totalVelocity = _currentVelocity + _externalVelocity;
+        Vector3 position = transform.position;
 
         if (movementMode == MovementMode.SideScrollerX)
         {
-            Vector3 position = transform.position + Vector3.right * (totalVelocity.x * deltaTime);
+            position += Vector3.right * (totalVelocity.x * deltaTime);
             position.z = _sideScrollDepth;
 
             if (_useSideScrollHorizontalRange)
             {
                 position.x = Mathf.Clamp(position.x, _sideScrollHorizontalRange.x, _sideScrollHorizontalRange.y);
+            }
+
+            if (_jumpMotor != null)
+            {
+                position = _jumpMotor.Simulate(position, deltaTime);
+                position.z = _sideScrollDepth;
             }
 
             transform.position = position;
@@ -361,15 +390,20 @@ public class PlayerMover : MonoBehaviour
             return;
         }
 
-        transform.position += totalVelocity * deltaTime;
+        position += totalVelocity * deltaTime;
 
         if (_useGroundPlaneBounds)
         {
-            Vector3 position = transform.position;
             position.x = Mathf.Clamp(position.x, _groundPlaneXRange.x, _groundPlaneXRange.y);
             position.z = Mathf.Clamp(position.z, _groundPlaneZRange.x, _groundPlaneZRange.y);
-            transform.position = position;
         }
+
+        if (_jumpMotor != null)
+        {
+            position = _jumpMotor.Simulate(position, deltaTime);
+        }
+
+        transform.position = position;
 
         Vector3 planarVelocity = new Vector3(totalVelocity.x, 0f, totalVelocity.z);
         if (planarVelocity.sqrMagnitude > 0.0001f)
@@ -499,6 +533,20 @@ public class PlayerMover : MonoBehaviour
         _moveInput = Vector2.ClampMagnitude(fallbackMove, 1f);
     }
 
+    private void ProcessJumpInput()
+    {
+        bool useFallbackJump = _usingFallbackInput || _jumpAction == null;
+        bool jumpPressed = (_jumpAction != null && _jumpAction.enabled && _jumpAction.WasPressedThisFrame())
+            || (useFallbackJump && Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
+            || (useFallbackJump && Gamepad.current != null && Gamepad.current.buttonSouth.wasPressedThisFrame);
+        if (!jumpPressed)
+        {
+            return;
+        }
+
+        _jumpMotor?.QueueJump();
+    }
+
     private void ProcessActionInteraction()
     {
         if (ShouldBlockInteractionInput())
@@ -552,6 +600,18 @@ public class PlayerMover : MonoBehaviour
         _currentInteractable = nextInteractable;
         _currentInteractable?.OnFocusGained(this);
         OnInteractableTargetChanged?.Invoke(this, _currentInteractable);
+    }
+
+    private void SyncLightZoneEffects()
+    {
+        LightZoneEffect zone = LightZoneEffect.FindBest(transform.position);
+        if (zone != null)
+        {
+            zone.ApplyCurrentEffects(this);
+            return;
+        }
+
+        ResetLightZoneMultipliers();
     }
 
     private void OnDrawGizmosSelected()

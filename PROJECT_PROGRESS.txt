@@ -21,8 +21,185 @@
 - 当前推进顺序：M0 可运行骨架 -> M1 探索闭环 -> M2 对话剧情闭环
 
 ## 当前阶段
-- 阶段：M2 对话与剧情闭环（进行中）
-- 当前目标：完成对话分支、立绘切换、剧情事件桥接、章节状态管理
+- 阶段：M2 对话与剧情闭环 -> 向可扩展垂直切片过渡（进行中）
+- 当前目标：验证 `灰烬客厅 -> 铜镜长廊` 两层切片切换、统一状态入口、Prefab 化与正式 UI 架构
+
+- 时间：2026-04-17 15:05 CST
+- 动作：补上“旧 UI 残留清扫”链路，处理“新 UI 已可见，但老 UI 还叠在上面”的问题。排查后确认主场景本身没有内置 Canvas，问题更像是运行时残留的 legacy 屏幕 UI 根对象仍在参与渲染。现在 `GameBootstrap.EnsureUi()` 会先确保 `UiBootstrap` 存在，再执行 `CleanupLegacyRuntimeUi()`：凡是不属于 `UiBootstrap` 层级、也不是主菜单控制器持有的屏幕 Canvas，都会在 `Main` 场景启动时被销毁，避免旧提示框/旧弹窗/旧 prefab UI 与新 HUD/Dialogue/Modal 同时显示。清扫后再补建 `SimpleDialogueUI / InteractionPromptUI / QuestTrackerUI / DialogueChoiceUI` 等逻辑控制器，避免误删旧壳体后缺少事件桥接组件。
+- 修改文件：
+  - Assets/Scripts/GameBootstrap.cs
+  - PROJECT_PROGRESS.txt
+- 当前验证：
+  - `git diff --check` 已通过
+  - 由于本机 Unity 编辑器当时正开着同一项目，新的 batchmode 编译再次被 Unity 以“another Unity instance is running”拦截
+  - 这轮最关键的验证点改为编辑器内确认：进入 `Main` 后是否只剩 `UiBootstrap` 这套 UI，不再有旧提示框/旧面板叠层
+- 接手者下一步：
+  1. 在 Unity 里进 `Main`，确认新 HUD / 对话 / 模态还在，同时旧 UI 叠层已经消失
+  2. 如果还有残留，优先看 Hierarchy 里是否仍有不在 `UiBootstrap` 下面的额外 Canvas，把对象名告诉接手者继续加到清扫规则里
+  3. 等本机关闭 Unity 后，再补跑一次 batchmode 编译或烟测，把这轮修复补上机器验证
+
+- 时间：2026-04-17 14:48 CST
+- 动作：继续把新生成的黑金 UI 切片真正接到高频界面上，解决“结构已经重构但体感仍像老 UI”的问题。重点不是再挪文件，而是把玩家最常看到的几块界面改成明确吃 `ChoicePanel / ModalFrame / PortraitFrame / MarkerChip / PrimaryButton` 的样式。`HudCanvasView` 里的状态、任务、环境、完成提示等卡片现在不再只是纯色矩形，而是统一改走切片框体；`DialogueCanvasView` 的立绘框、姓名牌和选项行也补上了黑金框体；`ModalCanvasView` 的主弹窗壳体改成了 `ModalFrame + ChoicePanel` 组合；主菜单额外补了一块标题牌匾，让入口页和游戏内 UI 的视觉语言更接近。
+- 修改文件：
+  - Assets/Scripts/UI/HUD/HudCanvasView.cs
+  - Assets/Scripts/UI/Dialogue/DialogueCanvasView.cs
+  - Assets/Scripts/UI/Modal/ModalCanvasView.cs
+  - Assets/Scripts/MainMenuController.cs
+  - PROJECT_PROGRESS.txt
+- 当前验证：
+  - `git diff --check` 已通过
+  - 因为本机 Unity 编辑器当时正开着同一项目，新的 batchmode 编译被 Unity 以“another Unity instance is running”拦截，暂未拿到这轮视觉改动的独立编译日志
+  - 这轮需要优先做编辑器内肉眼验收，重点确认 HUD/对话/模态/主菜单 是否已经明显脱离旧 UI 观感
+- 接手者下一步：
+  1. 在 Unity 里重新编译后，先看 `Menu`、再进 `Main`，确认主菜单标题区、HUD 左上/右上卡片、对话选项框和模态面板都已经换成黑金框体
+  2. 如果仍觉得“像老 UI”，优先继续改 `HudCanvasView` 的布局比例和 `MainMenuController` 的标题区结构，而不是只继续微调颜色
+  3. 等本机关闭 Unity 后，再补跑一次 batchmode 编译或相关烟测，把这轮视觉改动补齐机器验证
+
+- 时间：2026-04-17 11:42 Asia/Shanghai
+- 动作：继续推进正式 UI 架构的低风险重构，先完成 Batch 1 的脚本归位与 Batch 3 的一轮令牌化/原子组件收敛，并把新生成的 UI 切片素材真正接入更多界面。`PlayerStatusHud / LightZoneHudPresenter / AshParlorChoiceOverlay / FloorSummaryPanel / InventoryCanvasView` 已迁入 `Assets/Scripts/UI/...` 对应子目录；新增 `UiTokens` 与 `UiComponentCatalog`，开始把颜色、字号、按钮、面板外框和切片应用统一收口。`ModalCanvasView / DialogueCanvasView / FloorSummaryPanel / InventoryCanvasView / HudCanvasView` 现在都至少部分改用新的组件目录或公共 chrome 入口，避免每个 View 各自重复拼装 `ModalFrame / ChoicePanel / PrimaryButton`。同时把本地 UI 架构文档和当前实现说明里的关键路径同步到了新目录结构。
+- 修改文件：
+  - Assets/Scripts/UI/Core/UiTokens.cs
+  - Assets/Scripts/UI/Core/UiComponentCatalog.cs
+  - Assets/Scripts/UI/Core/UiTheme.cs
+  - Assets/Scripts/UI/Dialogue/DialogueCanvasView.cs
+  - Assets/Scripts/UI/Modal/ModalCanvasView.cs
+  - Assets/Scripts/UI/HUD/HudCanvasView.cs
+  - Assets/Scripts/UI/HUD/PlayerStatusHud.cs
+  - Assets/Scripts/UI/HUD/LightZoneHudPresenter.cs
+  - Assets/Scripts/UI/Overlay/AshParlorChoiceOverlay.cs
+  - Assets/Scripts/UI/Overlay/FloorSummaryPanel.cs
+  - Assets/Scripts/UI/Inventory/InventoryCanvasView.cs
+  - Docs/03_UI/UI_ARCHITECTURE_SPEC.md
+  - Docs/01_Project/CURRENT_IMPLEMENTATION_STATUS_CN.md
+  - PROJECT_PROGRESS.txt
+- 当前验证：
+  - Unity batchmode 导入/编译已通过，未看到这轮 UI 重构带来的新增 C# 编译错误
+  - 旧路径文档引用已更新到新的 `Assets/Scripts/UI/...` 目录
+  - 仍需在 Unity 编辑器内人工确认 `Menu / Main / Level 0 / Level 1` 的 UI 呈现与交互完全无回归
+- 接手者下一步：
+  1. 进 Unity 逐个打开 `Menu / Main / Level 0 / Level 1`，重点确认 `FloorSummary / Inventory / HUD / Dialogue / Modal` 的外框和按钮视觉仍正常
+  2. 如果继续做正式 UI 架构，优先推进 `UiStateCoordinator` 有限状态机与 `UiViewBase` 只读契约，不要再把状态判断散回各个 View
+  3. 最终提交前再跑一次 `git diff --check`，确认 TMP 字体资源没有被 Unity 重新带出尾随空格
+
+- 时间：2026-04-15 16:18 CST
+- 动作：清理 `git diff --check` 的 TMP 资源尾随空格噪音。对 `Hiragino Sans GB UI Body SDF.asset`、`Hiragino Sans GB UI Display SDF.asset` 和 `LiberationSans SDF - Fallback.asset` 仅执行尾随空格清理，不回滚任何真实字形或字体资产内容，避免把之前 HUD 中文文案触发的合法字形更新误当成无关改动抹掉。
+- 修改文件：
+  - Assets/Resources/Fonts/TMP/Hiragino Sans GB UI Body SDF.asset
+  - Assets/Resources/Fonts/TMP/Hiragino Sans GB UI Display SDF.asset
+  - Assets/TextMesh Pro/Resources/Fonts & Materials/LiberationSans SDF - Fallback.asset
+  - PROJECT_PROGRESS.txt
+- 当前验证：
+  - 待重新执行 `git diff --check`
+- 接手者下一步：
+  1. 如果 Unity 再次重写 TMP 资源，优先先确认是合法字形更新还是单纯 whitespace 噪音
+  2. 提交前再跑一次 `git diff --check`
+
+- 时间：2026-04-15 16:12 CST
+- 动作：收口玩家跳跃架构的 prefab 持久化与自动验收。把 `PlayerJumpMotor` 正式写入 `Player.prefab`，并把 `PlayerMover` 的 `jumpActionName` 显式序列化为 `Jump`，避免再依赖运行时补组件。`PlayerJumpSmokeCheck` 也改成可跨 Play Mode 域重载恢复回调，增加超时状态快照，能自动跳过主场景开局对白后再验证跳跃。最关键的修正是 `PlayerJumpMotor` 新增“虚拟地面平面”回退：因为当前房间地板是无 collider 的视觉块，纯物理 `CapsuleCast` 会把角色直接掉进虚空；现在优先吃真实 collider，缺失时回落到项目自己的楼层高度作为可落地面，并且只在下落阶段参与落地吸附，避免上升第一帧就被吸回地面。
+- 修改文件：
+  - Assets/Scripts/PlayerJumpMotor.cs
+  - Assets/Scripts/PlayerMover.cs
+  - Assets/Scripts/SpriteCharacterLighting.cs
+  - Assets/Scripts/IGroundProjectionProvider.cs
+  - Assets/Prefabs/Player.prefab
+  - Assets/Editor/PlayerJumpSmokeCheck.cs
+  - PROJECT_PROGRESS.txt
+- 当前验证：
+  - `PlayerJumpSmokeCheck.RunInBatchMode` 已返回成功
+  - 已确认自动烟测会经历：跳过开局对白 -> 角色起跳 -> 达到足够离地高度 -> 回到初始楼层高度
+  - 已确认 `Player.prefab` 不再依赖 `RequireComponent`/`Awake` 临时补挂 `PlayerJumpMotor`
+- 接手者下一步：
+  1. 在 Unity 编辑器里实机按一次 `Space / 手柄 South Button`，确认手感是否符合预期
+  2. 如果觉得起跳偏轻或下落偏飘，优先调 `PlayerJumpMotor` 的 `jumpHeight / gravity / fallGravityMultiplier`
+  3. 如果以后做台阶、坑洞或可跳平台，再考虑给特定地形补真实 collider，让 `PlayerJumpMotor` 优先吃物理地面而不是虚拟平面
+
+- 时间：2026-04-15 15:48 CST
+- 动作：开始给玩家接入可扩展的跳跃架构，先不碰怪物。新增 `PlayerJumpMotor` 作为独立的纵向运动模块，负责跳跃缓冲、土狼时间、重力、上下碰撞与落地检测；`PlayerMover` 继续只管水平输入与位移，再在末端把位置交给 `PlayerJumpMotor` 做垂直修正。同步新增 `IGroundProjectionProvider`，让 `SpriteCharacterLighting` 能从角色组件拿到“地面投影点”，这样接触阴影会贴在地面，不会跟着跳起来的身体一起漂浮。输入上优先走现有 Input System 里的 `Jump` action，缺失时退回 `Space / 手柄 South Button`。这版保留现有 kinematic 控制器，不把玩家整套移动改成刚体物理，避免把探索、交互和 2.5D 走位体系一起推倒重来。
+- 修改文件：
+  - Assets/Scripts/PlayerJumpMotor.cs
+  - Assets/Scripts/PlayerJumpMotor.cs.meta
+  - Assets/Scripts/IGroundProjectionProvider.cs
+  - Assets/Scripts/IGroundProjectionProvider.cs.meta
+  - Assets/Scripts/PlayerMover.cs
+  - Assets/Scripts/SpriteCharacterLighting.cs
+  - PROJECT_PROGRESS.txt
+- 当前验证：
+  - 已确认项目的 Input Actions 里存在 `Jump` action
+  - 已确认玩家 prefab 目前是 `Rigidbody + isKinematic + useGravity=false`，因此这版跳跃按手写控制器路线接入是合理的
+  - Unity `Editor.log` 暂未出现这次改动相关的新增编译错误，但尚未完成一轮编辑器内手感验收
+- 接手者下一步：
+  1. 回 Unity 等脚本编译完成，先验证 `Space / 手柄 A` 是否能正常起跳和落地
+  2. 重点看相机跟随、阴影贴地和房间交互在跳跃过程中是否自然
+  3. 如果手感偏飘，优先调 `PlayerJumpMotor` 里的 `jumpHeight / gravity / fallGravityMultiplier`，不要先去改 `PlayerMover` 的水平参数
+
+- 时间：2026-04-15 15:19 CST
+- 动作：补上受控随机选层机制。`GameStateHub` 现在会维护已通关楼层列表，并在层结算点击“继续前行”时统一走 `SelectNextFloorAfterCompletion()`：只要还有未首次通关的楼层，就按 `FloorVariant` 顺序推进到下一个；全部首次通关完成后，再从已解锁楼层池里随机选择下一层。楼层结算不再由每个楼层控制器各自写死下一层，而是统一走基类 `ContinueFromCompletedFloor()`。同步把已通关楼层列表写进 `SaveSystem` 存档，保证继续旅程时不会丢失解锁池；新旅程会清空该列表并从 `Level 0` 重新开始。顺手把 `TowerInteriorSlice` 的楼层枚举改成顶层 `FloorVariant`，去掉 `0/1` 的硬编码夹取，让选层逻辑可以自动发现新增楼层枚举值。
+- 修改文件：
+  - Assets/Scripts/Core/GameStateHub.cs
+  - Assets/Scripts/SaveSystem.cs
+  - Assets/Scripts/FloorRunController.cs
+  - Assets/Scripts/AshParlorRunController.cs
+  - Assets/Scripts/MirrorCorridorRunController.cs
+  - Assets/Scripts/MainMenuController.cs
+  - Assets/Scripts/TowerInteriorSlice.cs
+  - PROJECT_PROGRESS.txt
+- 当前验证：
+  - `git diff --check` 已通过
+  - Unity `Editor.log` 里未看到这次改动相关的新增编译错误
+  - 因为本机 Unity 编辑器当前占用了同一项目，暂未能再跑 batchmode 层结算烟测
+- 接手者下一步：
+  1. 在 Unity 里人工跑一遍 `Level 0 -> 层结算 -> 继续前行`，确认首次会切到 `Level 1`
+  2. 再通关 `Level 1` 一次，确认层结算继续后会从当前已解锁楼层池中随机选层
+  3. 如果新增 `FloorVariant`，记得同时补齐 `TowerInteriorSlice` 对应的内容构建逻辑；选层池本身不需要再额外改代码
+
+- 时间：2026-04-15 15:09 CST
+- 动作：修正光暗局势系统里“点灯后怪物速度体感没变化”的链路缺口。之前 `LightZoneEffect` 只影响了敌人攻击冷却，没有把亮暗状态乘进敌人的追击速度，导致点亮烛台后虽然出手间隔恢复了，但怪物逼近速度依然和暗区体感接近。现已补上敌人移动倍率：暗区会让敌人追击更快，点灯后立即恢复默认追击速度；HUD 说明也同步改成“逼近与出手恢复常态”，避免文案和真实效果脱节。
+- 修改文件：
+  - Assets/Scripts/LightZoneEffect.cs
+  - Assets/Scripts/SimpleEnemyController.cs
+  - Assets/Scripts/UI/HUD/LightZoneHudPresenter.cs
+  - PROJECT_PROGRESS.txt
+- 当前验证：
+  - 待执行 Unity 编译与铜镜长廊相关烟测，重点确认点亮烛台后敌人追击速度会立刻回落
+- 接手者下一步：
+  1. 在 Unity 里进暗区观察 MirrorEcho 的追击速度，再点亮同房烛台确认逼近速度立即恢复
+  2. 如果体感仍不够明显，优先微调 `LightZoneEffect.darkEnemyMoveSpeedMultiplier`，不要再去动每个敌人的基础 `moveSpeed`
+  3. 最终提交前再跑一次 `git diff --check`，确认 TMP 资源没有被 Unity 顺手带出尾随空格
+
+- 时间：2026-04-15 Asia/Shanghai
+- 动作：完成铜镜长廊双路线通关验证与一轮打磨。新增 `MirrorCorridorPlaythroughCheck`，会在编辑器批处理里把 `CurrentFloorIndex` 置为 1，然后依次验证第一盏灯、压力房 MirrorEcho_A/B 激活、铜镜选择提示、风险/保守分支、终局房第二盏灯、奖励拾取、出口与层结算文案。顺手把镜廊的风险/保守差异拉开：压力房回声敌人略增强，终局回声在风险路更激进、保守路更克制；镜前选择文案补上了实际代价/收益提示；终局房首次进入时加入了分支反馈；镜房提示光和终局房灯光稍微提亮，压力房洗墙光略压低，让五段式节奏更清楚。
+- 修改文件：
+  - Assets/Editor/MirrorCorridorPlaythroughCheck.cs
+  - Assets/Scripts/MirrorCorridorRunController.cs
+  - Assets/Scripts/TowerInteriorSlice.cs
+  - PROJECT_PROGRESS.txt
+- 当前验证：
+  - `MirrorCorridorPlaythroughCheck.RunRiskInBatchMode` 已返回成功
+  - `MirrorCorridorPlaythroughCheck.RunSafeInBatchMode` 已返回成功
+  - 两条路线都已覆盖：第一盏灯 -> 压力房 -> 铜镜选择 -> 终局房 -> 第二盏灯 -> 出口 -> 层结算
+  - 结算文案校验通过：
+    - Risk：`1 / 1`、`选择了打碎铜镜`
+    - Safe：`0 / 1`、`选择了绕过铜镜`
+- 接手者下一步：
+  1. 进 Unity 肉眼确认 Choice Room 与 Finale Room 的灯光节奏是否符合预期，尤其是镜面提示光和终局房出口读图是否更清楚
+  2. 如果还想继续拉开风险/保守体感，优先继续调 `MirrorCorridorRunController` 里的终局回声 profile，而不是再堆新敌人
+  3. 最终提交前再跑一次 `git diff --check`，因为 Unity 退出时仍可能把 TMP 资产重新带出尾随空格
+
+- 时间：2026-04-15 Asia/Shanghai
+- 动作：检查并收口主菜单/主场景烟测与 `git diff --check` 噪音来源。已把 `MainSceneSmokeCheck` 和 `MenuSceneSmokeCheck` 共用的运行流程抽到新的 `SceneSmokeCheckRunner`，保留每个场景各自的运行时校验与 Main 场景的“跳过初始菜单重定向”钩子。同步重新核对字体资源变更来源：`LiberationSans SDF - Fallback.asset` 主要是 Unity/TMP 重序列化导致的格式噪音；`Hiragino Sans GB UI Body SDF.asset` 则因为 HUD 新增了“范围 / 恢复 / 袭 / 率 / 冲 / 刺”等中文文案而写入了真实字形数据，不能再简单当成无关 fallback 噪音处理。
+- 修改文件：
+  - Assets/Editor/MainSceneSmokeCheck.cs
+  - Assets/Editor/MenuSceneSmokeCheck.cs
+  - Assets/Editor/SceneSmokeCheckRunner.cs
+  - PROJECT_PROGRESS.txt
+- 当前验证：
+  - `MenuSceneSmokeCheck.RunInBatchMode` 已通过
+  - `MainSceneSmokeCheck.RunInBatchMode` 已通过
+  - 仍需在最终提交前再次清理两份 TMP 字体资源中的尾随空格，让 `git diff --check` 回到通过状态
+- 接手者下一步：
+  1. 先处理 `Assets/Resources/Fonts/TMP/Hiragino Sans GB UI Body SDF.asset` 和 `Assets/TextMesh Pro/Resources/Fonts & Materials/LiberationSans SDF - Fallback.asset` 的尾随空格
+  2. 再跑一次 `git diff --check`，确认只剩真实业务改动
+  3. 如果后续继续新增中文 HUD 文案，优先接受 Hiragino 字体资源的真实字形更新，不要再把它误回滚成“无关改动”
 
 ## M2 新增功能
 - DialogueNode / DialogueChoice / DialogueEvent：数据驱动的对话节点 ScriptableObject，支持选项分支和剧情事件
@@ -63,9 +240,9 @@
 - 已新增门 / 拾取物 / 触发器三类最小交互骨架
 
 ## 当前状态
-- 已完成代码接线
-- 已完成快速静态检查
-- 当前待做：进 Unity 内验证现有任务流、日志状态，以及新交互骨架是否正常挂接
+- 已完成两层切片骨架、状态中枢、Prefab 化、层结算、光暗局势影响、武器数据驱动与事件解耦
+- 已完成 Unity batch 编译与部分楼层级烟测
+- 当前待做：在 Unity 编辑器内完整手动验证 `Level 0 结算 -> Level 1 接管`
 
 ## 下一步（M2 场景内验证）
 1. 创建 DialogueNode ScriptableObject（例：守夜人对话含2个选项）
@@ -85,6 +262,7 @@
 - [ ] DialogueEvent.TriggerQuest 可触发任务完成
 
 ## 关键文件
+- Docs/01_Project/CURRENT_IMPLEMENTATION_STATUS_CN.md
 - Assets/Scripts/PlayerMover.cs
 - Assets/Scripts/CameraFollow.cs
 - Assets/Scripts/IInteractable.cs
@@ -100,8 +278,124 @@
 - Assets/Scripts/DoorInteractable.cs
 - Assets/Scripts/PickupInteractable.cs
 - Assets/Scripts/TriggerZoneObjective.cs
+- Assets/Scripts/Core/GameStateHub.cs
+- Assets/Scripts/FloorRunController.cs
+- Assets/Scripts/MirrorCorridorRunController.cs
+- Assets/Scripts/TowerInteriorSlice.cs
 
 ## 最新记录
+- 时间：2026-04-15 14:32 Asia/Shanghai
+- 动作：深化光暗局势影响系统，并修正主场景烟测与菜单首场景的冲突
+- 修改文件：
+  - Assets/Scripts/LightZoneEffect.cs
+  - Assets/Scripts/PlayerMover.cs
+  - Assets/Scripts/SimpleEnemyController.cs
+  - Assets/Scripts/UI/HUD/LightZoneHudPresenter.cs
+  - Assets/Scripts/GameBootstrap.cs
+  - Assets/Editor/MainSceneSmokeCheck.cs
+  - PROJECT_PROGRESS.txt
+- 实现内容：
+  1. 保持 `LightZoneEffect` 的核心倍率为需求值：暗区敌人攻击冷却 0.7 倍、玩家冲刺 0.8 倍、交互范围 0.7 倍；亮区交互范围 1.5 倍，其余恢复常态
+  2. `LightZoneEffect.SetLit()` 现在在切灯时会先重新扫描房间占用者，再即时重施效果，避免只有下一次进出触发器时才更新
+  3. `SimpleEnemyController.SetLightZoneAttackCooldownMultiplier()` 现在会在亮暗切换时重算“下一次攻击时间”，让烛台点亮后同房间敌人的攻击节奏立刻变缓，不再等上一轮旧冷却自然耗完
+  4. `PlayerMover` 与 `SimpleEnemyController` 启用时都会主动同步当前光区状态，避免对象一开始就在房间里但没触发 `OnTriggerEnter` 时错过倍率
+  5. `LightZoneHudPresenter` 文案改为明确提示百分比：亮区显示“交互范围 +50%，敌人恢复常态”，暗区显示“敌袭频率 +30%，冲刺 -20%，交互范围 -30%”
+  6. 现有 `MainSceneSmokeCheck` 因项目已改成主菜单首场景而误报失败；现在通过 `PlayerPrefs` 临时跳过首帧菜单重定向，恢复 `Main` 场景烟测能力
+- 当前验证：
+  - Unity batch compile 已通过
+  - `MainSceneSmokeCheck.RunInBatchMode` 已通过
+  - 已确认主场景烟测会进入 `Main`，不再被菜单重定向打断
+  - 尚未做人工战斗体感验收；仍需在编辑器里实机确认“暗区更凶、点灯后立即变安全”的主观感受是否足够明显
+- 下一步：
+  1. 进入 `Main`，在未点灯房间观察敌人攻击频率与交互距离，再点亮烛台对比
+  2. 如果体感还不够强，优先再调暗区敌人基础 `attackCooldown` 或压力房 `SetEncounterProfile()`，不先改系统骨架
+  3. 若想把 HUD 再做得更直观，可追加亮暗状态的小型常驻色条或闪烁过渡
+- 时间：2026-04-15 19:20 Asia/Shanghai
+- 动作：排查并修复主菜单 Play 时的粒子系统报错，补菜单场景烟测
+- 修改文件：
+  - Assets/Scripts/MainMenuController.cs
+  - Assets/Editor/MenuSceneSmokeCheck.cs
+  - Assets/Editor/MenuSceneSmokeCheck.cs.meta
+  - PROJECT_PROGRESS.txt
+- 实现内容：
+  1. 用 Unity batchmode + 自定义 `MenuSceneSmokeCheck` 复现并锁定主菜单播放时的运行时问题
+  2. 确认报错来自 `MainMenuController.BuildAshParticles()`：一处是在粒子系统仍处于播放态时修改 `duration`，另一处是 `velocityOverLifetime` 的 XYZ 曲线模式不一致
+  3. 现在创建灰烬粒子后会先 `Stop(...StopEmittingAndClear)`，再配置参数并手动 `Play()`，消除 `Setting the duration while system is still playing is not supported`
+  4. 补上 `velocityOverLifetime.z` 的同模式曲线，消除 `Particle Velocity curves must all be in the same mode`
+  5. 新增 `Tools/DarkVillage/Smoke Test Menu Scene`，后续可快速回归菜单标题、按钮、EventSystem、主相机和灰烬粒子是否正常生成
+- 当前验证：
+  - 已通过 Unity batchmode 运行 `MenuSceneSmokeCheck.RunInBatchMode`
+  - 菜单场景 Play 时不再出现上述两条粒子系统错误
+  - 菜单烟测已确认主场景为 `Menu`、`MainMenuController`/按钮/EventSystem/粒子系统均存在
+- 下一步：
+  1. 在你当前打开的 Unity 编辑器里再按一次 Play，确认 Console 已清净
+  2. 接着手点 `新旅程 / 继续旅程 / 死亡回菜单` 三条实际链路，完成功能验收
+- 时间：2026-04-15 19:35 Asia/Shanghai
+- 动作：补主菜单场景、继续旅程入口和死亡回菜单链路
+- 修改文件：
+  - Assets/Scenes/Menu.unity
+  - Assets/Scenes/Menu.unity.meta
+  - Assets/Scripts/MainMenuController.cs
+  - Assets/Scripts/MainMenuController.cs.meta
+  - Assets/Scripts/Core/SceneLoader.cs
+  - Assets/Scripts/SaveSystem.cs
+  - Assets/Scripts/PlayerCombat.cs
+  - ProjectSettings/EditorBuildSettings.asset
+  - PROJECT_PROGRESS.txt
+- 实现内容：
+  1. 新增 `Assets/Scenes/Menu.unity`，并把 Build Settings 的首场景切到 `Menu`
+  2. 新增 `MainMenuController`，运行时生成纯黑主菜单界面：标题 `ERSARN`、副标题“异常空间”、`新旅程 / 继续旅程 / 离开` 三个按钮，以及灰烬粒子飘落背景
+  3. `继续旅程` 现在会根据 `SaveSystem.HasSaveData()` 自动启用/禁用；有存档时走 `SaveSystem.Load()` 恢复
+  4. `SceneLoader` 改成真正按传入场景加载，并新增 `LoadMenu`；`ReloadCurrent` 也改为按当前场景重载，不再硬编码回 `Main`
+  5. `PlayerCombat` 的死亡流程从“延时重载当前场景”改成“延时返回主菜单”
+  6. `SaveSystem` 现在不会在玩家已死亡时覆盖存档，避免死亡返回菜单后把“死前一刻”的状态写坏
+- 当前验证：
+  - 已完成代码级串联检查，确认菜单 -> 新旅程 -> Main、菜单 -> 继续旅程 -> 存档加载、死亡 -> 菜单三条路径在代码上已经接通
+  - 尚未在 Unity 编辑器内实机验证 `Menu.unity` 的视觉、按钮点击和死亡回菜单表现
+- 下一步：
+  1. 在 Unity 中把 Play Scene 切到 `Menu` 或直接从 Build Settings 首场景启动，确认进入主菜单
+  2. 分别验证 `新旅程`、`继续旅程`、玩家死亡后回菜单三条链路
+  3. 如果按钮视觉还偏素，可再在不破坏纯黑基调的前提下补轻微呼吸或淡入动画
+- 时间：2026-04-15 19:10 Asia/Shanghai
+- 动作：进一步合并项目层文档，把 `01_Project/` 里的三份重复入口收成一份当前总览
+- 修改文件：
+  - Docs/01_Project/CURRENT_IMPLEMENTATION_STATUS_CN.md
+  - Docs/README.md
+  - Docs/01_Project/DARKVILLAGE_NOTION_IMPORT_CN.md（删除）
+  - Docs/01_Project/NOTION_DOCS_INDEX_CN.md（删除）
+  - PROJECT_PROGRESS.txt
+- 实现内容：
+  1. 把 `DARKVILLAGE_NOTION_IMPORT_CN.md` 与 `NOTION_DOCS_INDEX_CN.md` 中仍有价值的内容并入 `CURRENT_IMPLEMENTATION_STATUS_CN.md`
+  2. 让 `CURRENT_IMPLEMENTATION_STATUS_CN.md` 同时承担“当前实现真相 + Notion 首页正文来源 + 推荐页面树”三种职责
+  3. `Docs/README.md` 同步简化，只保留合并后的单一项目入口，不再让接手者在三份总览之间来回跳
+- 当前验证：
+  - 已确认 `01_Project/` 目录从 3 份项目层文档收成 1 份
+  - 已确认 README 不再引用已删除的两份旧文档
+- 下一步：
+  1. 如果后面还觉得文档多，可再评估是否把 `INTERIOR_CUTAWAY_SPEC.md` 和 `MONSTER_DESIGN_SPEC.md` 向玩法总纲追加为附录
+  2. 暂时先保留玩法 / UI 专题分拆，避免主文档再次膨胀
+- 时间：2026-04-15 18:55 Asia/Shanghai
+- 动作：更新并整合项目文档，补“当前实现状态”总览，并同步修正文档中对 UI、楼层切片和当前阶段的过时描述
+- 修改文件：
+  - Docs/01_Project/CURRENT_IMPLEMENTATION_STATUS_CN.md
+  - Docs/README.md
+  - Docs/01_Project/NOTION_DOCS_INDEX_CN.md
+  - Docs/01_Project/DARKVILLAGE_NOTION_IMPORT_CN.md
+  - Docs/03_UI/UI_ARCHITECTURE_SPEC.md
+  - PROJECT_PROGRESS.txt
+- 实现内容：
+  1. 新增 `CURRENT_IMPLEMENTATION_STATUS_CN.md`，把“当前可玩内容、主架构、楼层切换、状态中枢、Prefab 化、UI 现状、接手入口”收成一份单独的当前真相文档
+  2. 更新 `Docs/README.md`，把新总览文档提到第一阅读顺位，避免接手者直接扎进旧总览或专题文档里猜现状
+  3. 更新 Notion 导入与页面树文档，把项目从“单层灰烬客厅验证”改成“灰烬客厅 + 铜镜长廊的两层切片骨架”
+  4. 修正 `UI_ARCHITECTURE_SPEC.md` 的现状审计，把项目从“主要依赖 OnGUI”改成“主游戏 UI 已经是 UGUI + TMP，OnGUI 仅保留给调试”
+  5. 同步刷新 `PROJECT_PROGRESS.txt` 顶部阶段、目标、当前状态和关键文件入口
+- 当前验证：
+  - 已检查主要文档入口之间的定位描述
+  - 已确保文案与当前代码状态一致，不再把项目写成仅有单层或主要依赖 OnGUI
+  - 尚未做 Notion 外部展示层级的再次整理
+- 下一步：
+  1. 如果继续投喂 Notion，可直接以 `CURRENT_IMPLEMENTATION_STATUS_CN.md` 作为首页正文来源
+  2. 等下一轮实机验证后，再把“Level 0 -> Level 1 手动验收结果”补进本文件和状态总览
 - 时间：2026-04-13 15:53 CST
 - 动作：完成灰烬客厅五段式切片节奏锚点 task2
 - 修改文件：
@@ -220,7 +514,7 @@
 - 时间：2026-04-12 19:40 Asia/Shanghai
 - 动作：修正人物面板文本错位，并定位/修复字体发糊链路
 - 修改文件：
-  - Assets/Scripts/UI/InventoryCanvasView.cs
+  - Assets/Scripts/UI/Inventory/InventoryCanvasView.cs
   - Assets/Scripts/UI/Core/UiFactory.cs
   - Assets/Editor/TmpFontAssetBuilder.cs
   - PROJECT_PROGRESS.txt
@@ -241,7 +535,7 @@
 - 动作：把背包升级为完整人物面板，并在面板内切换背包页
 - 修改文件：
   - Assets/Scripts/InventoryController.cs
-  - Assets/Scripts/UI/InventoryCanvasView.cs
+  - Assets/Scripts/UI/Inventory/InventoryCanvasView.cs
   - PROJECT_PROGRESS.txt
 - 实现内容：
   1. 将原来的单独背包入口升级为统一的人物面板，打开后默认进入“人物”页
@@ -262,8 +556,8 @@
   - Assets/Scripts/InventoryItemCatalog.cs.meta
   - Assets/Scripts/InventoryController.cs
   - Assets/Scripts/InventoryController.cs.meta
-  - Assets/Scripts/UI/InventoryCanvasView.cs
-  - Assets/Scripts/UI/InventoryCanvasView.cs.meta
+  - Assets/Scripts/UI/Inventory/InventoryCanvasView.cs
+  - Assets/Scripts/UI/Inventory/InventoryCanvasView.cs.meta
 - 修改文件：
   - Assets/Scripts/ChapterStateManager.cs
   - Assets/Scripts/PickupInteractable.cs
@@ -554,7 +848,7 @@
 - 动作：按需求删除左上战斗状态模板，不再用运行时强制隐藏补丁。已删除 `CombatHud` 脚本与其 meta，`GameBootstrap` 不再自动创建该组件；`HudCanvasView` 也不再构建 `CombatPanel`。同时新增独立的 `PlayerStatusHud` 与简化版 `StatusPanel`，只负责显示角色名与生命值，避免把角色状态和战斗威胁/操作提示混在同一块模板里。
 - 修改文件：
   - Assets/Scripts/GameBootstrap.cs
-  - Assets/Scripts/PlayerStatusHud.cs
+  - Assets/Scripts/UI/HUD/PlayerStatusHud.cs
   - Assets/Scripts/UI/HUD/HudCanvasView.cs
   - Assets/Scripts/CombatHud.cs
   - Assets/Scripts/CombatHud.cs.meta
@@ -584,8 +878,8 @@
   - Assets/Scripts/PlayerMover.cs
   - Assets/Scripts/UI/Core/UiBootstrap.cs
   - Assets/Scripts/UI/Core/UiStateCoordinator.cs
-  - Assets/Scripts/UI/FloorSummaryPanel.cs
-  - Assets/Scripts/UI/FloorSummaryPanel.cs.meta
+  - Assets/Scripts/UI/Overlay/FloorSummaryPanel.cs
+  - Assets/Scripts/UI/Overlay/FloorSummaryPanel.cs.meta
   - PROJECT_PROGRESS.txt
 - 当前验证：
   - `git diff --check` 已通过

@@ -6,6 +6,7 @@ public sealed class GameStateHub : MonoBehaviour
 {
     private const int DefaultFloorIndex = 0;
     private static int s_CurrentFloorIndex = DefaultFloorIndex;
+    private static readonly HashSet<int> s_ClearedFloorIndices = new HashSet<int>();
 
     public readonly struct ObjectiveStateSnapshot
     {
@@ -28,6 +29,7 @@ public sealed class GameStateHub : MonoBehaviour
     public static event Action<int> OnCurrentFloorIndexChanged;
 
     public static int CurrentFloorIndexRuntime => Mathf.Max(0, s_CurrentFloorIndex);
+    public static IReadOnlyList<int> KnownFloorIndicesRuntime => GetKnownFloorIndices();
 
     public static void MarkRuntimeStateDirty()
     {
@@ -36,7 +38,7 @@ public sealed class GameStateHub : MonoBehaviour
 
     public static void SetCurrentFloorIndexRuntime(int floorIndex)
     {
-        int normalizedFloorIndex = Mathf.Max(0, floorIndex);
+        int normalizedFloorIndex = NormalizeFloorIndex(floorIndex);
         if (s_CurrentFloorIndex == normalizedFloorIndex)
         {
             return;
@@ -47,11 +49,59 @@ public sealed class GameStateHub : MonoBehaviour
         SaveSystem.MarkDirty();
     }
 
+    public static void ResetFloorProgressionRuntime()
+    {
+        bool hadClearedFloors = s_ClearedFloorIndices.Count > 0;
+        s_ClearedFloorIndices.Clear();
+        if (hadClearedFloors)
+        {
+            SaveSystem.MarkDirty();
+        }
+    }
+
+    public static bool HasClearedFloorRuntime(int floorIndex)
+    {
+        return s_ClearedFloorIndices.Contains(NormalizeFloorIndex(floorIndex));
+    }
+
+    public static bool MarkFloorClearedRuntime(int floorIndex)
+    {
+        int normalizedFloorIndex = NormalizeFloorIndex(floorIndex);
+        bool added = s_ClearedFloorIndices.Add(normalizedFloorIndex);
+        if (added)
+        {
+            SaveSystem.MarkDirty();
+        }
+
+        return added;
+    }
+
+    public static int SelectNextFloorAfterCompletion(int completedFloorIndex)
+    {
+        MarkFloorClearedRuntime(completedFloorIndex);
+
+        int nextSequentialFloorIndex = GetNextSequentialFloorIndex();
+        if (nextSequentialFloorIndex >= 0)
+        {
+            SetCurrentFloorIndexRuntime(nextSequentialFloorIndex);
+            return nextSequentialFloorIndex;
+        }
+
+        int[] availableFloorPool = GetAvailableFloorPoolSnapshot();
+        int nextFloorIndex = availableFloorPool.Length > 0
+            ? availableFloorPool[UnityEngine.Random.Range(0, availableFloorPool.Length)]
+            : NormalizeFloorIndex(DefaultFloorIndex);
+        SetCurrentFloorIndexRuntime(nextFloorIndex);
+        return nextFloorIndex;
+    }
+
     public int CurrentFloorIndex
     {
         get => CurrentFloorIndexRuntime;
         set => SetCurrentFloorIndexRuntime(value);
     }
+
+    public int[] ClearedFloorIndices => GetClearedFloorIndicesSnapshot();
 
     public string CurrentObjectiveId => _tracker != null ? _tracker.CurrentObjectiveId : string.Empty;
     public string CurrentObjective => _tracker != null ? _tracker.CurrentObjectiveText : string.Empty;
@@ -179,6 +229,11 @@ public sealed class GameStateHub : MonoBehaviour
         return InventoryController.GetCurrentFloorCollectionSummary(floorItemIds);
     }
 
+    public bool HasClearedFloor(int floorIndex)
+    {
+        return HasClearedFloorRuntime(floorIndex);
+    }
+
     public bool HasCollectedItem(string itemId)
     {
         return ChapterState.HasItem(itemId);
@@ -192,6 +247,11 @@ public sealed class GameStateHub : MonoBehaviour
     public void ResetRuntimeState()
     {
         ChapterState.ResetRuntime();
+    }
+
+    public void ResetFloorProgression()
+    {
+        ResetFloorProgressionRuntime();
     }
 
     public void Save()
@@ -212,6 +272,14 @@ public sealed class GameStateHub : MonoBehaviour
     internal string[] GetCollectedItemSnapshot()
     {
         return ChapterState.GetCollectedItemsSnapshot();
+    }
+
+    internal int[] GetClearedFloorIndicesSnapshot()
+    {
+        int[] snapshot = new int[s_ClearedFloorIndices.Count];
+        s_ClearedFloorIndices.CopyTo(snapshot);
+        Array.Sort(snapshot);
+        return snapshot;
     }
 
     internal ObjectiveStateSnapshot GetObjectiveSnapshot()
@@ -248,6 +316,20 @@ public sealed class GameStateHub : MonoBehaviour
         if (objectiveState.IsCompleted)
         {
             _tracker.CompleteObjective(objectiveState.ObjectiveId);
+        }
+    }
+
+    internal void RestoreClearedFloorIndices(IEnumerable<int> floorIndices)
+    {
+        s_ClearedFloorIndices.Clear();
+        if (floorIndices == null)
+        {
+            return;
+        }
+
+        foreach (int floorIndex in floorIndices)
+        {
+            s_ClearedFloorIndices.Add(NormalizeFloorIndex(floorIndex));
         }
     }
 
@@ -299,5 +381,87 @@ public sealed class GameStateHub : MonoBehaviour
     {
         SaveSystem.MarkDirty();
         OnChoiceResultChanged?.Invoke(choiceResult);
+    }
+
+    private static int[] GetKnownFloorIndices()
+    {
+        Array rawValues = Enum.GetValues(typeof(FloorVariant));
+        List<int> knownFloorIndices = new List<int>(rawValues.Length);
+        foreach (object rawValue in rawValues)
+        {
+            int floorIndex = (int)rawValue;
+            if (floorIndex >= 0 && !knownFloorIndices.Contains(floorIndex))
+            {
+                knownFloorIndices.Add(floorIndex);
+            }
+        }
+
+        if (knownFloorIndices.Count == 0)
+        {
+            knownFloorIndices.Add(DefaultFloorIndex);
+        }
+
+        knownFloorIndices.Sort();
+        return knownFloorIndices.ToArray();
+    }
+
+    private static int NormalizeFloorIndex(int floorIndex)
+    {
+        int[] knownFloorIndices = GetKnownFloorIndices();
+        if (knownFloorIndices.Length == 0)
+        {
+            return DefaultFloorIndex;
+        }
+
+        for (int i = 0; i < knownFloorIndices.Length; i++)
+        {
+            if (knownFloorIndices[i] == floorIndex)
+            {
+                return floorIndex;
+            }
+        }
+
+        if (floorIndex <= knownFloorIndices[0])
+        {
+            return knownFloorIndices[0];
+        }
+
+        return knownFloorIndices[knownFloorIndices.Length - 1];
+    }
+
+    private static int GetNextSequentialFloorIndex()
+    {
+        int[] knownFloorIndices = GetKnownFloorIndices();
+        for (int i = 0; i < knownFloorIndices.Length; i++)
+        {
+            int floorIndex = knownFloorIndices[i];
+            if (!s_ClearedFloorIndices.Contains(floorIndex))
+            {
+                return floorIndex;
+            }
+        }
+
+        return -1;
+    }
+
+    private static int[] GetAvailableFloorPoolSnapshot()
+    {
+        int[] knownFloorIndices = GetKnownFloorIndices();
+        List<int> availableFloorIndices = new List<int>(knownFloorIndices.Length);
+        for (int i = 0; i < knownFloorIndices.Length; i++)
+        {
+            int floorIndex = knownFloorIndices[i];
+            if (s_ClearedFloorIndices.Contains(floorIndex))
+            {
+                availableFloorIndices.Add(floorIndex);
+            }
+        }
+
+        if (availableFloorIndices.Count == 0)
+        {
+            availableFloorIndices.Add(knownFloorIndices[0]);
+        }
+
+        return availableFloorIndices.ToArray();
     }
 }

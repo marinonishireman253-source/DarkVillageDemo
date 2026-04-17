@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.Rendering;
@@ -6,7 +7,9 @@ using UnityEngine.SceneManagement;
 
 public class GameBootstrap : MonoBehaviour
 {
+    private const string SkipInitialMenuRedirectKey = "DarkVillage.SkipInitialMenuRedirect";
     private static GameBootstrap s_Instance;
+    private static bool s_InitialSceneRedirected;
 
     private readonly struct CameraProfile
     {
@@ -26,8 +29,20 @@ public class GameBootstrap : MonoBehaviour
 
     private static readonly Vector3 DefaultPlayerSpawnPosition = new Vector3(0f, 1f, 0f);
     private static readonly CameraProfile InteriorCameraProfile = new CameraProfile(new Vector3(0f, 3.8f, -15.7f), new Vector3(0f, 1.4f, 0f), new Vector3(8f, 0f, 0f), 23f);
+    private static readonly string[] AllowedBootstrapCanvasNames =
+    {
+        "Canvas_Backdrop",
+        "Canvas_HUD",
+        "Canvas_WorldMarkers",
+        "Canvas_Dialogue",
+        "Canvas_Inventory",
+        "Canvas_Overlay",
+        "Canvas_Modal",
+        "Canvas_FloorSummary",
+        "Canvas_Debug"
+    };
 
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void Bootstrap()
     {
         if (s_Instance != null)
@@ -50,6 +65,43 @@ public class GameBootstrap : MonoBehaviour
 
         s_Instance = this;
         DontDestroyOnLoad(gameObject);
+
+        Scene scene = SceneManager.GetActiveScene();
+        bool shouldSkipInitialRedirect = ConsumeInitialRedirectSkipRequest();
+        if (!shouldSkipInitialRedirect)
+        {
+            shouldSkipInitialRedirect = ShouldSkipInitialRedirectForEditorPlay(scene);
+        }
+
+        if (!shouldSkipInitialRedirect
+            && !s_InitialSceneRedirected
+            && scene.path != SceneLoader.MenuScenePath
+            && scene.name != SceneLoader.MenuSceneName)
+        {
+            s_InitialSceneRedirected = true;
+            SceneLoader.LoadMenu(saveBeforeLoad: false);
+        }
+    }
+
+    private static bool ConsumeInitialRedirectSkipRequest()
+    {
+        bool shouldSkipInitialRedirect = PlayerPrefs.GetInt(SkipInitialMenuRedirectKey, 0) == 1;
+        if (shouldSkipInitialRedirect)
+        {
+            PlayerPrefs.DeleteKey(SkipInitialMenuRedirectKey);
+        }
+
+        return shouldSkipInitialRedirect;
+    }
+
+    private static bool ShouldSkipInitialRedirectForEditorPlay(Scene scene)
+    {
+#if UNITY_EDITOR
+        return scene.path != SceneLoader.MenuScenePath
+            && scene.name != SceneLoader.MenuSceneName;
+#else
+        return false;
+#endif
     }
 
     private void OnEnable()
@@ -265,6 +317,12 @@ public class GameBootstrap : MonoBehaviour
             new GameObject("UiBootstrap").AddComponent<UiBootstrap>();
         }
 
+        CleanupLegacyRuntimeUi();
+        EnsureUiControllers();
+    }
+
+    private void EnsureUiControllers()
+    {
         if (FindFirstObjectByType<SimpleDialogueUI>() == null)
         {
             new GameObject("SimpleDialogueUI").AddComponent<SimpleDialogueUI>();
@@ -272,17 +330,7 @@ public class GameBootstrap : MonoBehaviour
 
         if (FindFirstObjectByType<InteractionPromptUI>() == null)
         {
-            CorePrefabCatalog catalog = CorePrefabCatalog.Load();
-            GameObject interactionPromptPrefab = catalog != null ? catalog.InteractionPromptPrefab : null;
-            if (interactionPromptPrefab != null)
-            {
-                GameObject promptObject = Instantiate(interactionPromptPrefab);
-                promptObject.name = interactionPromptPrefab.name;
-            }
-            else
-            {
-                Debug.LogError("[GameBootstrap] Missing InteractionPrompt prefab in CorePrefabCatalog.");
-            }
+            new GameObject("InteractionPromptUI").AddComponent<InteractionPromptUI>();
         }
 
         if (FindFirstObjectByType<QuestTrackerUI>() == null)
@@ -340,6 +388,76 @@ public class GameBootstrap : MonoBehaviour
             DialogueVoicePlayer voicePlayer = new GameObject("DialogueVoicePlayer").AddComponent<DialogueVoicePlayer>();
             voicePlayer.LoadDefaultClips();
         }
+    }
+
+    private void CleanupLegacyRuntimeUi()
+    {
+        UiBootstrap uiBootstrap = FindFirstObjectByType<UiBootstrap>();
+        HashSet<int> destroyedRoots = new HashSet<int>();
+        Canvas[] canvases = FindObjectsByType<Canvas>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+
+        for (int i = 0; i < canvases.Length; i++)
+        {
+            Canvas canvas = canvases[i];
+            if (canvas == null)
+            {
+                continue;
+            }
+
+            Transform canvasTransform = canvas.transform;
+            if (uiBootstrap != null && canvasTransform.IsChildOf(uiBootstrap.transform))
+            {
+                continue;
+            }
+
+            GameObject canvasRoot = canvasTransform.root != null ? canvasTransform.root.gameObject : canvas.gameObject;
+            if (canvasRoot == null)
+            {
+                continue;
+            }
+
+            if (canvasRoot.GetComponentInParent<MainMenuController>() != null)
+            {
+                continue;
+            }
+
+            if (uiBootstrap != null && canvasRoot == uiBootstrap.gameObject)
+            {
+                continue;
+            }
+
+            if (IsAllowedBootstrapCanvasName(canvas.gameObject.name))
+            {
+                continue;
+            }
+
+            int rootId = canvasRoot.GetInstanceID();
+            if (!destroyedRoots.Add(rootId))
+            {
+                continue;
+            }
+
+            Debug.Log($"[GameBootstrap] Removing legacy runtime UI root '{canvasRoot.name}' so only UiBootstrap-owned UI remains.");
+            Destroy(canvasRoot);
+        }
+    }
+
+    private static bool IsAllowedBootstrapCanvasName(string canvasName)
+    {
+        if (string.IsNullOrWhiteSpace(canvasName))
+        {
+            return false;
+        }
+
+        for (int i = 0; i < AllowedBootstrapCanvasNames.Length; i++)
+        {
+            if (AllowedBootstrapCanvasNames[i] == canvasName)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void EnsureInventory()

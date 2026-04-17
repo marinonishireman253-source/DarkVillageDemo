@@ -384,6 +384,7 @@ public sealed class HudCanvasView : MonoBehaviour
             new Vector2(22f, -20f),
             new Color(0.03f, 0.04f, 0.06f, 0.92f),
             new Color(0.09f, 0.11f, 0.15f, 0.94f),
+            _theme.ChoicePanelSprite,
             out _statusPanel);
         _statusGroup = UiFactory.GetOrAddCanvasGroup(_statusPanel.gameObject);
 
@@ -398,7 +399,7 @@ public sealed class HudCanvasView : MonoBehaviour
             new Vector2(0f, 1f),
             new Vector2(-34f, 24f),
             new Vector2(18f, -32f),
-            _theme.DisplayFont,
+            _theme.BodyFont,
             19,
             FontStyle.Bold,
             TextAnchor.MiddleLeft,
@@ -460,6 +461,7 @@ public sealed class HudCanvasView : MonoBehaviour
             new Vector2(-22f, -20f),
             new Color(0.04f, 0.05f, 0.08f, 0.9f),
             new Color(0.09f, 0.1f, 0.14f, 0.95f),
+            _theme.ChoicePanelSprite,
             out _questPanel);
         _questGroup = UiFactory.GetOrAddCanvasGroup(_questPanel.gameObject);
 
@@ -474,7 +476,7 @@ public sealed class HudCanvasView : MonoBehaviour
             new Vector2(0f, 1f),
             new Vector2(-34f, 26f),
             new Vector2(18f, -40f),
-            _theme.DisplayFont,
+            _theme.BodyFont,
             18,
             FontStyle.Bold,
             TextAnchor.MiddleLeft,
@@ -508,6 +510,7 @@ public sealed class HudCanvasView : MonoBehaviour
             new Vector2(22f, -132f),
             new Color(0.03f, 0.04f, 0.06f, 0.88f),
             new Color(0.09f, 0.11f, 0.15f, 0.92f),
+            _theme.ChoicePanelSprite,
             out _environmentPanel);
         _environmentGroup = UiFactory.GetOrAddCanvasGroup(_environmentPanel.gameObject);
 
@@ -519,7 +522,7 @@ public sealed class HudCanvasView : MonoBehaviour
             new Vector2(0f, 0.5f),
             new Vector2(34f, 34f),
             new Vector2(26f, 0f),
-            _theme.DisplayFont,
+            _theme.BodyFont,
             24,
             FontStyle.Bold,
             TextAnchor.MiddleCenter,
@@ -566,6 +569,7 @@ public sealed class HudCanvasView : MonoBehaviour
             new Vector2(0f, -22f),
             new Color(0.12f, 0.17f, 0.12f, 0.92f),
             new Color(0.18f, 0.24f, 0.16f, 0.95f),
+            _theme.ChoicePanelSprite,
             out _completionBanner);
         _completionBannerGroup = UiFactory.GetOrAddCanvasGroup(_completionBanner.gameObject);
 
@@ -599,6 +603,7 @@ public sealed class HudCanvasView : MonoBehaviour
             new Vector2(0f, 26f),
             new Color(0.02f, 0.03f, 0.05f, 0.92f),
             new Color(0.08f, 0.09f, 0.12f, 0.94f),
+            _theme.InteractionPromptSprite,
             out _interactionPrompt);
         _interactionGroup = UiFactory.GetOrAddCanvasGroup(_interactionPrompt.gameObject);
 
@@ -610,7 +615,12 @@ public sealed class HudCanvasView : MonoBehaviour
             new Vector2(0f, 0.5f),
             new Vector2(64f, 64f),
             new Vector2(18f, 0f));
-        UiFactory.CreateImage("KeyPlateOuter", keyPlate, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.76f));
+        Image keyPlateOuter = UiFactory.CreateImage("KeyPlateOuter", keyPlate, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.76f));
+        if (_theme.KeycapBadgeSprite != null)
+        {
+            UiFactory.ApplySprite(keyPlateOuter, _theme.KeycapBadgeSprite);
+            keyPlateOuter.color = Color.white;
+        }
         UiFactory.CreateImage("KeyPlateInner", keyPlate, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-6f, -6f), Vector2.zero, new Color(0.12f, 0.1f, 0.08f, 0.98f));
         _interactionKeyText = UiFactory.CreateText(
             "KeyText",
@@ -669,6 +679,7 @@ public sealed class HudCanvasView : MonoBehaviour
             new Vector2(-22f, 24f),
             new Color(0.09f, 0.03f, 0.03f, 0.94f),
             new Color(0.14f, 0.05f, 0.06f, 0.95f),
+            _theme.CombatPanelSprite,
             out _combatPanel);
         _combatGroup = UiFactory.GetOrAddCanvasGroup(_combatPanel.gameObject);
 
@@ -681,6 +692,11 @@ public sealed class HudCanvasView : MonoBehaviour
             new Vector2(18f, 18f),
             Vector2.zero,
             new Color(0.7f, 0.19f, 0.16f, 0.12f));
+        if (_theme.CombatEmberGlowSprite != null)
+        {
+            UiFactory.ApplySprite(_combatDangerGlow, _theme.CombatEmberGlowSprite, Image.Type.Simple);
+            _combatDangerGlow.color = Color.white;
+        }
         _combatDangerGlow.transform.SetAsFirstSibling();
 
         TMP_Text eyebrow = CreateEyebrow(inner, "Eyebrow", string.Empty, new Vector2(0f, -18f));
@@ -762,6 +778,7 @@ public sealed class HudCanvasView : MonoBehaviour
             Vector2.zero,
             new Color(0.03f, 0.04f, 0.05f, 0.9f),
             new Color(0.09f, 0.1f, 0.12f, 0.92f),
+            _theme.MarkerChipSprite,
             out _worldMarker);
         _worldMarkerGroup = UiFactory.GetOrAddCanvasGroup(_worldMarker.gameObject);
 
@@ -823,6 +840,7 @@ public sealed class HudCanvasView : MonoBehaviour
         Vector2 anchoredPosition,
         Color outerColor,
         Color innerColor,
+        Sprite chromeSprite,
         out RectTransform root)
     {
         root = UiFactory.CreateRect(name, parent, anchorMin, anchorMax, pivot, sizeDelta, anchoredPosition);
@@ -831,11 +849,17 @@ public sealed class HudCanvasView : MonoBehaviour
 
         Image outer = UiFactory.CreateImage("Outer", root, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, outerColor);
         outer.raycastTarget = false;
+        UiComponentCatalog.ApplyChrome(outer, chromeSprite, outerColor);
         Image frame = UiFactory.CreateImage("Frame", root, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-2f, -2f), Vector2.zero, new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.2f));
         frame.raycastTarget = false;
+        if (chromeSprite != null)
+        {
+            frame.color = new Color(1f, 1f, 1f, 0f);
+        }
 
         RectTransform inner = UiFactory.CreateRect("Inner", root, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-12f, -12f), Vector2.zero);
-        Image fill = UiFactory.CreateImage("Fill", inner, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, innerColor);
+        Image fill = UiFactory.CreateImage("Fill", inner, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero,
+            chromeSprite != null ? new Color(innerColor.r, innerColor.g, innerColor.b, innerColor.a * 0.45f) : innerColor);
         fill.raycastTarget = false;
         UiFactory.CreateImage("AccentLine", inner, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f), new Vector2(2f, -18f), new Vector2(0f, 0f), new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.84f));
         return inner;

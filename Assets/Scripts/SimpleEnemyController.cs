@@ -46,6 +46,7 @@ public class SimpleEnemyController : MonoBehaviour
     private float _moveSpeedMultiplier = 1f;
     private float _attackRangeMultiplier = 1f;
     private float _attackCooldownMultiplier = 1f;
+    private float _lightZoneMoveSpeedMultiplier = 1f;
     private float _lightZoneAttackCooldownMultiplier = 1f;
     private bool _encounterEnabled = true;
     private bool _pendingAttackDamage;
@@ -78,6 +79,7 @@ public class SimpleEnemyController : MonoBehaviour
         BindPlayer(PlayerMover.LocalInstance);
         BindPlayerCombat(PlayerCombat.LocalInstance);
         BindStateCoordinator(UiStateCoordinator.Instance);
+        SyncLightZoneEffects();
     }
 
     private void OnDisable()
@@ -133,14 +135,28 @@ public class SimpleEnemyController : MonoBehaviour
         _attackCooldownMultiplier = Mathf.Clamp(attackCooldownMultiplier, 0.35f, 3f);
     }
 
+    public void SetLightZoneMoveSpeedMultiplier(float multiplier)
+    {
+        _lightZoneMoveSpeedMultiplier = Mathf.Clamp(multiplier, 0.4f, 2f);
+    }
+
     public void SetLightZoneAttackCooldownMultiplier(float multiplier)
     {
-        _lightZoneAttackCooldownMultiplier = Mathf.Clamp(multiplier, 0.35f, 2f);
+        float nextMultiplier = Mathf.Clamp(multiplier, 0.35f, 2f);
+        if (Mathf.Approximately(_lightZoneAttackCooldownMultiplier, nextMultiplier))
+        {
+            return;
+        }
+
+        float previousMultiplier = _lightZoneAttackCooldownMultiplier;
+        _lightZoneAttackCooldownMultiplier = nextMultiplier;
+        RecalculatePendingAttackWindow(previousMultiplier);
     }
 
     public void ResetLightZoneMultipliers()
     {
-        _lightZoneAttackCooldownMultiplier = 1f;
+        SetLightZoneMoveSpeedMultiplier(1f);
+        SetLightZoneAttackCooldownMultiplier(1f);
     }
 
     public void SetEncounterEnabled(bool enabled)
@@ -299,7 +315,7 @@ public class SimpleEnemyController : MonoBehaviour
         }
 
         TransitionToState(EnemyState.Chasing);
-        float currentMoveSpeed = moveSpeed * _moveSpeedMultiplier;
+        float currentMoveSpeed = moveSpeed * _moveSpeedMultiplier * _lightZoneMoveSpeedMultiplier;
         transform.position += directionToPlayer * (currentMoveSpeed * Time.deltaTime);
     }
 
@@ -359,6 +375,40 @@ public class SimpleEnemyController : MonoBehaviour
         _attackRecoverUntil = Time.time + animationDuration + recoveryDuration;
         _nextAttackTime = _attackRecoverUntil + attackCooldown * _attackCooldownMultiplier * _lightZoneAttackCooldownMultiplier;
         TransitionToState(EnemyState.Attacking);
+    }
+
+    private void RecalculatePendingAttackWindow(float previousLightZoneMultiplier)
+    {
+        if (_nextAttackTime <= Time.time)
+        {
+            return;
+        }
+
+        float cooldownAnchor = Mathf.Max(Time.time, _attackRecoverUntil);
+        float previousFullCooldown = attackCooldown * _attackCooldownMultiplier * Mathf.Max(0.01f, previousLightZoneMultiplier);
+        float nextFullCooldown = attackCooldown * _attackCooldownMultiplier * Mathf.Max(0.01f, _lightZoneAttackCooldownMultiplier);
+
+        if (previousFullCooldown <= 0.0001f)
+        {
+            _nextAttackTime = cooldownAnchor + nextFullCooldown;
+            return;
+        }
+
+        float remainingCooldown = Mathf.Max(0f, _nextAttackTime - cooldownAnchor);
+        float remainingRatio = Mathf.Clamp01(remainingCooldown / previousFullCooldown);
+        _nextAttackTime = cooldownAnchor + nextFullCooldown * remainingRatio;
+    }
+
+    private void SyncLightZoneEffects()
+    {
+        LightZoneEffect zone = LightZoneEffect.FindBest(transform.position);
+        if (zone != null)
+        {
+            zone.ApplyCurrentEffects(this);
+            return;
+        }
+
+        ResetLightZoneMultipliers();
     }
 
     private void HandleDeath(CombatantHealth health)

@@ -104,6 +104,7 @@ GameObject:
   - component: {fileID: 381132336305803587}
   - component: {fileID: 220415332145680073}
   - component: {fileID: 8243359014634465887}
+  - component: {fileID: 9034778499981123456}
   - component: {fileID: 4912649494569763685}
   - component: {fileID: 2137493510245333309}
   - component: {fileID: 7387500610204730740}
@@ -140,7 +141,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 99982b78b08f44a719541bad7bb0df36, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::CombatantHealth
   maxHealth: 5
 --- !u!136 &381132336305803587
@@ -203,7 +204,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 381fd8f85c4e5439f8c9da5570e2d03f, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerMover
   walkSpeed: 4.2
   sprintSpeed: 8
@@ -217,12 +218,39 @@ MonoBehaviour:
   actionMapName: Player
   moveActionName: Move
   sprintActionName: Sprint
+  jumpActionName: Jump
   interactActionName: Interact
   interactionOffset: {x: 0, y: 0.9, z: 0.6}
   interactionRadius: 1.2
   interactionMask:
     serializedVersion: 2
     m_Bits: 4294967295
+--- !u!114 &9034778499981123456
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5242852388736538687}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4a8c8ef4dd0f4d7aa946907f86e6f61e, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerJumpMotor
+  jumpHeight: 1.8
+  gravity: 24
+  fallGravityMultiplier: 1.85
+  maxFallSpeed: 18
+  coyoteTime: 0.12
+  jumpBufferDuration: 0.14
+  useVirtualGroundPlane: 1
+  groundMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  groundProbeDistance: 0.18
+  landingSnapDistance: 0.12
+  collisionSkin: 0.02
+  minGroundNormalY: 0.55
 --- !u!114 &4912649494569763685
 MonoBehaviour:
   m_ObjectHideFlags: 0

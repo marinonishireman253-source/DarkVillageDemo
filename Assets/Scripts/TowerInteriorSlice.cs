@@ -2,14 +2,14 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using System.Collections.Generic;
 
+public enum FloorVariant
+{
+    AshParlor = 0,
+    MirrorCorridor = 1
+}
+
 public sealed class TowerInteriorSlice : MonoBehaviour
 {
-    private enum FloorVariant
-    {
-        AshParlor = 0,
-        MirrorCorridor = 1
-    }
-
     private const string RootName = "__TowerInteriorSlice";
     private const int LayoutVersion = 19;
     private const float RoomZoneOverlap = 4.6f;
@@ -167,7 +167,7 @@ public sealed class TowerInteriorSlice : MonoBehaviour
     {
         _player = player;
         _layoutVersion = LayoutVersion;
-        _floorVariant = (FloorVariant)Mathf.Clamp(GameStateHub.CurrentFloorIndexRuntime, 0, 1);
+        _floorVariant = (FloorVariant)GameStateHub.CurrentFloorIndexRuntime;
 
         BuildFloorState();
         BuildShell();
@@ -448,7 +448,7 @@ public sealed class TowerInteriorSlice : MonoBehaviour
         CreateDecorBlock(mirrorRoot, "MirrorBase", new Vector3(0f, 0.28f, 0f), new Vector3(2.4f, 0.56f, 1.18f), new Color(0.18f, 0.17f, 0.18f));
         CreateDecorBlock(mirrorRoot, "MirrorFrame", new Vector3(0f, 1.74f, 0.08f), new Vector3(2.1f, 2.92f, 0.24f), new Color(0.48f, 0.34f, 0.2f));
         CreateDecorBlock(mirrorRoot, "MirrorFace", new Vector3(0f, 1.74f, 0.2f), new Vector3(1.62f, 2.36f, 0.05f), new Color(0.32f, 0.38f, 0.44f));
-        CreatePointLight(mirrorRoot, "MirrorBeacon", new Vector3(0f, 1.86f, 0.28f), new Color(0.76f, 0.72f, 0.58f, 1f), 0.48f, 3.8f, LightRenderMode.ForcePixel);
+        CreatePointLight(mirrorRoot, "MirrorBeacon", new Vector3(0f, 1.86f, 0.28f), new Color(0.76f, 0.72f, 0.58f, 1f), 0.62f, 4.4f, LightRenderMode.ForcePixel);
 
         BoxCollider interaction = mirrorRoot.gameObject.AddComponent<BoxCollider>();
         interaction.isTrigger = true;
@@ -1396,14 +1396,14 @@ public sealed class TowerInteriorSlice : MonoBehaviour
                 CreateDeskLampRig(lightRoot, "EtchingLamp", new Vector3(-8.8f, 2.12f, 4.9f), new Vector3(0.22f, -0.96f, -0.16f), new Color(0.58f, 0.64f, 0.76f, 1f), 0.18f, 2.4f, 0.24f, 2.8f);
                 break;
             case PressureRoomIndex:
-                CreatePointLight(lightRoot, "PressureWash_A", new Vector3(-2.4f, 3.86f, 3.22f), new Color(0.42f, 0.5f, 0.62f, 1f), 0.44f, 10.2f, LightRenderMode.ForcePixel);
-                CreatePointLight(lightRoot, "PressureWash_B", new Vector3(5.8f, 3.74f, 3.34f), new Color(0.34f, 0.42f, 0.56f, 1f), 0.4f, 9.6f, LightRenderMode.ForcePixel);
+                CreatePointLight(lightRoot, "PressureWash_A", new Vector3(-2.4f, 3.86f, 3.22f), new Color(0.42f, 0.5f, 0.62f, 1f), 0.38f, 10.2f, LightRenderMode.ForcePixel);
+                CreatePointLight(lightRoot, "PressureWash_B", new Vector3(5.8f, 3.74f, 3.34f), new Color(0.34f, 0.42f, 0.56f, 1f), 0.34f, 9.6f, LightRenderMode.ForcePixel);
                 break;
             case ChoiceRoomIndex:
-                CreatePointLight(lightRoot, "MirrorHalo", new Vector3(0f, 2.12f, 0.82f), new Color(0.88f, 0.78f, 0.5f, 1f), 0.9f, 4.6f, LightRenderMode.ForcePixel);
+                CreatePointLight(lightRoot, "MirrorHalo", new Vector3(0f, 2.12f, 0.82f), new Color(0.88f, 0.78f, 0.5f, 1f), 1.08f, 4.9f, LightRenderMode.ForcePixel);
                 break;
             default:
-                CreatePendantRig(lightRoot, "ExitPendant", new Vector3(14.2f, 4.18f, 1.8f), new Color(0.88f, 0.82f, 0.58f, 1f), 0.42f, 4.6f, new Color(0.94f, 0.86f, 0.62f, 1f), 0.72f, 5.4f);
+                CreatePendantRig(lightRoot, "ExitPendant", new Vector3(14.2f, 4.18f, 1.8f), new Color(0.88f, 0.82f, 0.58f, 1f), 0.52f, 4.9f, new Color(0.94f, 0.86f, 0.62f, 1f), 0.88f, 5.8f);
                 break;
         }
     }

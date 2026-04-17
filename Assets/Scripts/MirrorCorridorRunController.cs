@@ -4,6 +4,19 @@ using UnityEngine;
 
 public sealed class MirrorCorridorRunController : FloorRunController
 {
+    private const float PressureEnemyMoveMultiplier = 1.22f;
+    private const float PressureEnemyAttackRangeMultiplier = 1.08f;
+    private const float PressureEnemyAttackCooldownMultiplier = 0.8f;
+    private const float FinalEnemyDefaultMoveMultiplier = 1.05f;
+    private const float FinalEnemyDefaultAttackRangeMultiplier = 1.1f;
+    private const float FinalEnemyDefaultAttackCooldownMultiplier = 0.96f;
+    private const float FinalEnemyRiskMoveMultiplier = 1.26f;
+    private const float FinalEnemyRiskAttackRangeMultiplier = 1.18f;
+    private const float FinalEnemyRiskAttackCooldownMultiplier = 0.76f;
+    private const float FinalEnemySafeMoveMultiplier = 0.9f;
+    private const float FinalEnemySafeAttackRangeMultiplier = 0.98f;
+    private const float FinalEnemySafeAttackCooldownMultiplier = 1.16f;
+
     private const int RoomCount = 5;
     private const string FirstBrazierObjectiveId = "mirror_corridor_first_brazier";
     private const string ChoiceObjectiveId = "mirror_corridor_choice";
@@ -128,14 +141,20 @@ public sealed class MirrorCorridorRunController : FloorRunController
         _pressureEnemies.Add(enemy);
         enemy.SetEncounterEnabled(false);
         enemy.gameObject.SetActive(false);
-        enemy.SetEncounterProfile(1.18f, 1.06f, 0.84f);
+        enemy.SetEncounterProfile(
+            PressureEnemyMoveMultiplier,
+            PressureEnemyAttackRangeMultiplier,
+            PressureEnemyAttackCooldownMultiplier);
     }
 
     public override void RegisterFinalEnemy(SimpleEnemyController enemy)
     {
         _finalEnemy = enemy;
         _finalEnemy?.SetEncounterEnabled(false);
-        _finalEnemy?.SetEncounterProfile(1.02f, 1.08f, 0.98f);
+        _finalEnemy?.SetEncounterProfile(
+            FinalEnemyDefaultMoveMultiplier,
+            FinalEnemyDefaultAttackRangeMultiplier,
+            FinalEnemyDefaultAttackCooldownMultiplier);
     }
 
     public override void RegisterRiskRewardPickup(PickupInteractable pickup)
@@ -273,7 +292,7 @@ public sealed class MirrorCorridorRunController : FloorRunController
                 SafeChoiceLabel,
                 RiskNarrative,
                 SafeNarrative,
-                "重新开始"),
+                "继续前行"),
             ContinueFromFloorSummary);
     }
 
@@ -284,14 +303,14 @@ public sealed class MirrorCorridorRunController : FloorRunController
             "走廊正中立着一面完好无损的铜镜。镜中映出穿旧制服的人影，始终背对着你。",
             "A / ← / 1 与 D / → / 2 切换    Enter / E 确认    Esc 返回",
             "风险",
-            "打碎铜镜\n碎片划破手掌，但你会看到一扇透着金光的门。",
+            "打碎铜镜\n会引来更暴烈的回声，但你能带走一块镜片。",
             "保守",
-            "绕过铜镜\n你不会受伤，但余光里那个人影会转过身。");
+            "绕过铜镜\n终局会稳一些，但那道人影会一路跟到门前。");
     }
 
     private void ContinueFromFloorSummary()
     {
-        ContinueToFloor(0);
+        ContinueFromCompletedFloor();
     }
 
     private void SynchronizeChoiceState()
@@ -347,6 +366,15 @@ public sealed class MirrorCorridorRunController : FloorRunController
                 if (!_finalEnemyAwakened)
                 {
                     _finalEnemyAwakened = true;
+                    if (_choiceState == ChapterState.ChoiceResult.Risk)
+                    {
+                        ShowLines("伊尔萨恩", "碎裂的回声先到了。", "它知道你带着一块镜片。");
+                    }
+                    else if (_choiceState == ChapterState.ChoiceResult.Safe)
+                    {
+                        ShowLines("伊尔萨恩", "它没有立刻扑过来。", "它只是比上一间更近了。");
+                    }
+
                     _finalEnemy?.SetEncounterEnabled(true);
                 }
                 break;
@@ -419,13 +447,22 @@ public sealed class MirrorCorridorRunController : FloorRunController
             switch (_choiceState)
             {
                 case ChapterState.ChoiceResult.Risk:
-                    _finalEnemy.SetEncounterProfile(1.18f, 1.14f, 0.86f);
+                    _finalEnemy.SetEncounterProfile(
+                        FinalEnemyRiskMoveMultiplier,
+                        FinalEnemyRiskAttackRangeMultiplier,
+                        FinalEnemyRiskAttackCooldownMultiplier);
                     break;
                 case ChapterState.ChoiceResult.Safe:
-                    _finalEnemy.SetEncounterProfile(0.94f, 1f, 1.08f);
+                    _finalEnemy.SetEncounterProfile(
+                        FinalEnemySafeMoveMultiplier,
+                        FinalEnemySafeAttackRangeMultiplier,
+                        FinalEnemySafeAttackCooldownMultiplier);
                     break;
                 default:
-                    _finalEnemy.SetEncounterProfile(1.02f, 1.08f, 0.98f);
+                    _finalEnemy.SetEncounterProfile(
+                        FinalEnemyDefaultMoveMultiplier,
+                        FinalEnemyDefaultAttackRangeMultiplier,
+                        FinalEnemyDefaultAttackCooldownMultiplier);
                     break;
             }
         }
@@ -440,14 +477,16 @@ public sealed class MirrorCorridorRunController : FloorRunController
             ShowLines(
                 "铜镜长廊",
                 "镜面碎开的一瞬间，你看见了门缝里的金光。",
-                "碎片划破了手掌，但你带走了它不肯给你的东西。");
+                "碎片划破了手掌，但你带走了它不肯给你的东西。",
+                "尽头房里会留下其中一块，别把它留给回声。");
         }
         else
         {
             ShowLines(
                 "铜镜长廊",
                 "你从镜子旁边走了过去。",
-                "快离开时，余光里那个人影转过了身。");
+                "快离开时，余光里那个人影转过了身。",
+                "你没有受伤，只是把它也一起带向了尽头。");
         }
     }
 

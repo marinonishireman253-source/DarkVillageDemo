@@ -317,10 +317,15 @@ public sealed class ModalCanvasView : MonoBehaviour
             size,
             Vector2.zero);
         UiFactory.CreateImage("Shadow", panel, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(40f, 40f), new Vector2(22f, -22f), new Color(0f, 0f, 0f, 0.4f));
-        UiFactory.CreateImage("Outer", panel, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.03f, 0.04f, 0.06f, 0.96f));
-        RectTransform inner = UiFactory.CreateRect("Inner", panel, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-16f, -16f), Vector2.zero);
-        UiFactory.CreateImage("Fill", inner, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.08f, 0.1f, 0.14f, 0.98f));
+        RectTransform inner = UiComponentCatalog.BuildPanelShell(
+            panel,
+            new Color(0.03f, 0.04f, 0.06f, 0.96f),
+            _theme.ModalFrameSprite,
+            _theme.ModalFrameSprite != null ? new Color(0.08f, 0.1f, 0.14f, 0.5f) : new Color(0.08f, 0.1f, 0.14f, 0.98f),
+            _theme.ChoicePanelSprite,
+            new Vector2(-16f, -16f));
         UiFactory.CreateImage("LeftAccent", inner, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f), new Vector2(4f, -40f), Vector2.zero, new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.92f));
+        UiFactory.CreateImage("TopAccent", inner, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), new Vector2(-88f, 2f), new Vector2(0f, -1f), new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.34f));
         return inner;
     }
 
@@ -336,32 +341,12 @@ public sealed class ModalCanvasView : MonoBehaviour
         out TMP_Text label)
     {
         RectTransform root = UiFactory.CreateRect(name, parent, anchorMin, anchorMax, pivot, sizeDelta, anchoredPosition);
-        Image background = UiFactory.CreateImage("Background", root, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero,
-            primary
-                ? new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.22f)
-                : new Color(1f, 1f, 1f, 0.05f));
-        UiFactory.CreateImage("Outline", root, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-2f, -2f), Vector2.zero,
-            primary
-                ? new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.42f)
-                : new Color(_theme.PrimaryText.r, _theme.PrimaryText.g, _theme.PrimaryText.b, 0.16f));
-
-        label = UiFactory.CreateText(
-            "Label",
-            root,
-            Vector2.zero,
-            Vector2.one,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(-32f, -18f),
-            Vector2.zero,
-            _theme.BodyFont,
-            22,
-            FontStyle.Bold,
-            TextAnchor.MiddleCenter,
-            _theme.PrimaryText);
+        Button button = primary
+            ? UiComponentCatalog.CreatePrimaryButton(root, string.Empty)
+            : UiComponentCatalog.CreateSecondaryButton(root, string.Empty);
+        label = button.GetComponentInChildren<TMP_Text>(true);
         label.textWrappingMode = TextWrappingModes.Normal;
-
-        Button button = root.gameObject.AddComponent<Button>();
-        button.targetGraphic = background;
+        label.rectTransform.sizeDelta = new Vector2(-32f, -18f);
         return button;
     }
 
@@ -387,27 +372,12 @@ public sealed class ModalCanvasView : MonoBehaviour
             root.offsetMax = new Vector2(-34f, anchoredPosition.y + sizeDelta.y);
         }
 
-        Image background = UiFactory.CreateImage("Background", root, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(1f, 1f, 1f, 0.05f));
-        UiFactory.CreateImage("Outline", root, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-2f, -2f), Vector2.zero, new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.18f));
+        Button button = UiComponentCatalog.CreateSecondaryButton(root, string.Empty);
         UiFactory.CreateImage("TopAccent", root, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), new Vector2(-28f, 2f), new Vector2(0f, -1f), new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.4f));
-
-        label = UiFactory.CreateText(
-            "Label",
-            root,
-            Vector2.zero,
-            Vector2.one,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(-34f, -30f),
-            Vector2.zero,
-            _theme.BodyFont,
-            22,
-            FontStyle.Bold,
-            TextAnchor.MiddleLeft,
-            _theme.PrimaryText);
+        label = button.GetComponentInChildren<TMP_Text>(true);
         label.textWrappingMode = TextWrappingModes.Normal;
-
-        Button button = root.gameObject.AddComponent<Button>();
-        button.targetGraphic = background;
+        label.alignment = TextAlignmentOptions.MidlineLeft;
+        label.rectTransform.sizeDelta = new Vector2(-34f, -30f);
         return button;
     }
 

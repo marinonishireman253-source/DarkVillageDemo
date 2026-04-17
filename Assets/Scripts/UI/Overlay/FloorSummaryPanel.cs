@@ -206,7 +206,7 @@ public sealed class FloorSummaryPanel : MonoBehaviour
             new Vector2(0.5f, 0.5f),
             Vector2.zero,
             Vector2.zero,
-            new Color(0f, 0f, 0f, 0.85f));
+            new Color(UiColors.Charcoal.r, UiColors.Charcoal.g, UiColors.Charcoal.b, 0.85f));
 
         RectTransform panel = UiFactory.CreateRect(
             "SummaryPanel",
@@ -218,10 +218,14 @@ public sealed class FloorSummaryPanel : MonoBehaviour
             Vector2.zero);
 
         UiFactory.CreateImage("Shadow", panel, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(28f, 28f), new Vector2(14f, -14f), new Color(0f, 0f, 0f, 0.34f));
-        UiFactory.CreateImage("Outer", panel, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.04f, 0.05f, 0.07f, 0.96f));
-        RectTransform inner = UiFactory.CreateRect("Inner", panel, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-20f, -20f), Vector2.zero);
-        UiFactory.CreateImage("Fill", inner, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.08f, 0.1f, 0.14f, 0.98f));
-        UiFactory.CreateImage("TopAccent", inner, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), new Vector2(-112f, 3f), new Vector2(0f, -1f), new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.54f));
+        RectTransform inner = UiComponentCatalog.BuildPanelShell(
+            panel,
+            new Color(0.04f, 0.05f, 0.07f, 0.96f),
+            _theme.ModalFrameSprite,
+            new Color(0.08f, 0.1f, 0.14f, 0.98f),
+            _theme.ChoicePanelSprite,
+            new Vector2(-20f, -20f));
+        UiComponentCatalog.CreateAccentLine("TopAccent", inner, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), new Vector2(-112f, 3f), new Vector2(0f, -1f), new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.54f));
 
         _titleText = UiFactory.CreateText(
             "Title",
@@ -232,7 +236,7 @@ public sealed class FloorSummaryPanel : MonoBehaviour
             new Vector2(-132f, 58f),
             new Vector2(0f, -72f),
             _theme.DisplayFont,
-            40,
+            UiFontSize.Hero,
             FontStyle.Bold,
             TextAnchor.MiddleCenter,
             _theme.PrimaryText);
@@ -256,20 +260,26 @@ public sealed class FloorSummaryPanel : MonoBehaviour
             new Vector2(0.5f, 0.5f),
             new Vector2(760f, 316f),
             new Vector2(0f, -12f));
-        UiFactory.CreateImage("SummaryBlockFill", summaryBlock, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.12f, 0.11f, 0.1f, 0.82f));
+        RectTransform summaryBlockInner = UiComponentCatalog.BuildPanelShell(
+            summaryBlock,
+            new Color(0.12f, 0.11f, 0.1f, 0.82f),
+            _theme.ChoicePanelSprite,
+            new Color(0.12f, 0.11f, 0.1f, 0.82f),
+            _theme.ChoicePanelSprite,
+            new Vector2(-2f, -2f));
         UiFactory.CreateImage("SummaryBlockOutline", summaryBlock, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(-2f, -2f), Vector2.zero, new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.18f));
-        UiFactory.CreateImage("SummaryBlockTop", summaryBlock, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), new Vector2(-36f, 2f), new Vector2(0f, -1f), new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.28f));
+        UiComponentCatalog.CreateAccentLine("SummaryBlockTop", summaryBlockInner, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), new Vector2(-36f, 2f), new Vector2(0f, -1f), new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.28f));
 
         TMP_Text collectionLabel = UiFactory.CreateText(
             "CollectionLabel",
-            summaryBlock,
+            summaryBlockInner,
             new Vector2(0f, 1f),
             new Vector2(1f, 1f),
             new Vector2(0.5f, 1f),
             new Vector2(-96f, 22f),
             new Vector2(0f, -34f),
             _theme.BodyFont,
-            16,
+            UiFontSize.Label,
             FontStyle.Normal,
             TextAnchor.MiddleCenter,
             _theme.Brass);
@@ -277,28 +287,28 @@ public sealed class FloorSummaryPanel : MonoBehaviour
 
         _collectionValueText = UiFactory.CreateText(
             "CollectionValue",
-            summaryBlock,
+            summaryBlockInner,
             new Vector2(0f, 1f),
             new Vector2(1f, 1f),
             new Vector2(0.5f, 1f),
             new Vector2(-96f, 50f),
             new Vector2(0f, -80f),
             _theme.DisplayFont,
-            40,
+            UiFontSize.Hero,
             FontStyle.Bold,
             TextAnchor.MiddleCenter,
             _theme.PrimaryText);
 
         TMP_Text choiceLabel = UiFactory.CreateText(
             "ChoiceLabel",
-            summaryBlock,
+            summaryBlockInner,
             new Vector2(0f, 1f),
             new Vector2(1f, 1f),
             new Vector2(0.5f, 1f),
             new Vector2(-96f, 22f),
             new Vector2(0f, -128f),
             _theme.BodyFont,
-            16,
+            UiFontSize.Label,
             FontStyle.Normal,
             TextAnchor.MiddleCenter,
             _theme.Brass);
@@ -306,28 +316,28 @@ public sealed class FloorSummaryPanel : MonoBehaviour
 
         _choiceValueText = UiFactory.CreateText(
             "ChoiceValue",
-            summaryBlock,
+            summaryBlockInner,
             new Vector2(0f, 1f),
             new Vector2(1f, 1f),
             new Vector2(0.5f, 1f),
             new Vector2(-96f, 38f),
             new Vector2(0f, -170f),
             _theme.BodyFont,
-            30,
+            UiFontSize.Emphasis,
             FontStyle.Bold,
             TextAnchor.MiddleCenter,
             _theme.PrimaryText);
 
         TMP_Text narrativeLabel = UiFactory.CreateText(
             "NarrativeLabel",
-            summaryBlock,
+            summaryBlockInner,
             new Vector2(0f, 1f),
             new Vector2(1f, 1f),
             new Vector2(0.5f, 1f),
             new Vector2(-96f, 22f),
             new Vector2(0f, -220f),
             _theme.BodyFont,
-            16,
+            UiFontSize.Label,
             FontStyle.Normal,
             TextAnchor.MiddleCenter,
             _theme.Brass);
@@ -335,14 +345,14 @@ public sealed class FloorSummaryPanel : MonoBehaviour
 
         _narrativeText = UiFactory.CreateText(
             "NarrativeValue",
-            summaryBlock,
+            summaryBlockInner,
             new Vector2(0f, 1f),
             new Vector2(1f, 1f),
             new Vector2(0.5f, 1f),
             new Vector2(-112f, 66f),
             new Vector2(0f, -250f),
             _theme.BodyFont,
-            20,
+            UiFontSize.Title,
             FontStyle.Normal,
             TextAnchor.MiddleCenter,
             _theme.SecondaryText);
@@ -357,42 +367,13 @@ public sealed class FloorSummaryPanel : MonoBehaviour
             new Vector2(0.5f, 0f),
             new Vector2(264f, 72f),
             new Vector2(0f, 52f));
-
-        Image buttonBackground = UiFactory.CreateImage(
-            "Background",
-            buttonRoot,
-            Vector2.zero,
-            Vector2.one,
-            new Vector2(0.5f, 0.5f),
-            Vector2.zero,
-            Vector2.zero,
-            new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.28f));
-        UiFactory.CreateImage(
-            "Outline",
-            buttonRoot,
-            Vector2.zero,
-            Vector2.one,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(-2f, -2f),
-            Vector2.zero,
-            new Color(_theme.Brass.r, _theme.Brass.g, _theme.Brass.b, 0.46f));
-
-        _continueLabel = UiFactory.CreateText(
-            "Label",
-            buttonRoot,
-            Vector2.zero,
-            Vector2.one,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(-20f, -16f),
-            Vector2.zero,
-            _theme.BodyFont,
-            20,
-            FontStyle.Bold,
-            TextAnchor.MiddleCenter,
-            _theme.PrimaryText);
-
-        _continueButton = buttonRoot.gameObject.AddComponent<Button>();
-        _continueButton.targetGraphic = buttonBackground;
+        _continueButton = UiComponentCatalog.CreatePrimaryButton(buttonRoot, string.Empty);
+        _continueLabel = _continueButton.GetComponentInChildren<TMP_Text>();
+        if (_continueLabel != null)
+        {
+            _continueLabel.font = UiFactory.GetOrCreateDefaultTmpFont(_theme.BodyFont);
+            _continueLabel.fontSize = UiFontSize.Title;
+        }
     }
 
     private IEnumerator FadeInRoutine(float duration)
@@ -432,4 +413,5 @@ public sealed class FloorSummaryPanel : MonoBehaviour
 
         gameObject.SetActive(false);
     }
+
 }

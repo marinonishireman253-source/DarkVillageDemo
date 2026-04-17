@@ -21,6 +21,8 @@ public sealed class LightZoneEffect : MonoBehaviour
     [SerializeField] private float darkSprintMultiplier = 0.8f;
 
     [Header("Enemy Multipliers")]
+    [SerializeField] private float litEnemyMoveSpeedMultiplier = 1f;
+    [SerializeField] private float darkEnemyMoveSpeedMultiplier = 1.18f;
     [SerializeField] private float litEnemyAttackCooldownMultiplier = 1f;
     [SerializeField] private float darkEnemyAttackCooldownMultiplier = 0.7f;
 
@@ -30,6 +32,10 @@ public sealed class LightZoneEffect : MonoBehaviour
 
     public bool IsLit => isLit;
     public string ZoneLabel => string.IsNullOrWhiteSpace(zoneLabel) ? "区域" : zoneLabel.Trim();
+    public float CurrentInteractionMultiplier => isLit ? litInteractionMultiplier : darkInteractionMultiplier;
+    public float CurrentSprintMultiplier => isLit ? litSprintMultiplier : darkSprintMultiplier;
+    public float CurrentEnemyMoveSpeedMultiplier => isLit ? litEnemyMoveSpeedMultiplier : darkEnemyMoveSpeedMultiplier;
+    public float CurrentEnemyAttackCooldownMultiplier => isLit ? litEnemyAttackCooldownMultiplier : darkEnemyAttackCooldownMultiplier;
 
     private void Awake()
     {
@@ -76,8 +82,19 @@ public sealed class LightZoneEffect : MonoBehaviour
         }
 
         isLit = lit;
+        RefreshOccupantsFromScene();
         ReapplyEffects();
         NotifyPlayerZoneChangedIfNeeded();
+    }
+
+    public void ApplyCurrentEffects(PlayerMover player)
+    {
+        ApplyToPlayer(player);
+    }
+
+    public void ApplyCurrentEffects(SimpleEnemyController enemy)
+    {
+        ApplyToEnemy(enemy);
     }
 
     public static LightZoneEffect FindBest(Vector3 worldPosition)
@@ -215,6 +232,7 @@ public sealed class LightZoneEffect : MonoBehaviour
             return;
         }
 
+        enemy.SetLightZoneMoveSpeedMultiplier(isLit ? litEnemyMoveSpeedMultiplier : darkEnemyMoveSpeedMultiplier);
         enemy.SetLightZoneAttackCooldownMultiplier(isLit ? litEnemyAttackCooldownMultiplier : darkEnemyAttackCooldownMultiplier);
     }
 

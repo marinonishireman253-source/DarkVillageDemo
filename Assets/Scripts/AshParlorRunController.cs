@@ -612,13 +612,13 @@ public sealed class AshParlorRunController : FloorRunController
                 SafeChoiceLabel,
                 RiskNarrative,
                 SafeNarrative,
-                "继续"),
+                "继续前行"),
             ContinueFromFloorSummary);
     }
 
     private void ContinueFromFloorSummary()
     {
-        ContinueToFloor(1);
+        ContinueFromCompletedFloor();
     }
 
     private void SetExitUnlocked(bool unlocked)

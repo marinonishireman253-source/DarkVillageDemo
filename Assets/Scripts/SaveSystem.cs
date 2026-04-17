@@ -21,6 +21,7 @@ public sealed class SaveSystem : MonoBehaviour
         public string choiceResult;
         public FlagData[] flags;
         public string[] collectedItems;
+        public int[] clearedFloorIndices;
         public int currentFloorIndex;
         public string savedAtUtc;
     }
@@ -250,6 +251,7 @@ public sealed class SaveSystem : MonoBehaviour
                 data.currentMarkerText,
                 false),
             ResolveObjectiveTarget(data.currentObjectiveId));
+        GameStateHub.Instance.RestoreClearedFloorIndices(data.clearedFloorIndices);
         GameStateHub.SetCurrentFloorIndexRuntime(data.currentFloorIndex);
         s_Dirty = false;
     }
@@ -293,6 +295,12 @@ public sealed class SaveSystem : MonoBehaviour
             return;
         }
 
+        CombatantHealth health = player.GetComponent<CombatantHealth>();
+        if (health != null && health.IsDead)
+        {
+            return;
+        }
+
         SaveData data = BuildSaveData(activeScene, player);
         string json = JsonUtility.ToJson(data, true);
         Directory.CreateDirectory(Path.GetDirectoryName(SavePath) ?? Application.persistentDataPath);
@@ -311,6 +319,9 @@ public sealed class SaveSystem : MonoBehaviour
         string[] collectedItems = gameStateHub != null
             ? gameStateHub.GetCollectedItemSnapshot()
             : Array.Empty<string>();
+        int[] clearedFloorIndices = gameStateHub != null
+            ? gameStateHub.GetClearedFloorIndicesSnapshot()
+            : Array.Empty<int>();
         GameStateHub.ObjectiveStateSnapshot objectiveState = gameStateHub != null
             ? gameStateHub.GetObjectiveSnapshot()
             : new GameStateHub.ObjectiveStateSnapshot(string.Empty, string.Empty, "目标", false);
@@ -338,6 +349,7 @@ public sealed class SaveSystem : MonoBehaviour
             choiceResult = (gameStateHub != null ? gameStateHub.CurrentChoiceResult : ChapterState.ChoiceResult.None).ToString(),
             flags = flags.ToArray(),
             collectedItems = collectedItems,
+            clearedFloorIndices = clearedFloorIndices,
             currentFloorIndex = gameStateHub != null ? gameStateHub.CurrentFloorIndex : GameStateHub.CurrentFloorIndexRuntime,
             savedAtUtc = DateTime.UtcNow.ToString("o")
         };

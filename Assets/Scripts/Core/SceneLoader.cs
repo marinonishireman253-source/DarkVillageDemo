@@ -4,6 +4,8 @@ using UnityEngine.SceneManagement;
 
 public sealed class SceneLoader : MonoBehaviour
 {
+    public const string MenuSceneName = "Menu";
+    public const string MenuScenePath = "Assets/Scenes/Menu.unity";
     public const string MainSceneName = "Main";
     public const string MainScenePath = "Assets/Scenes/Main.unity";
 
@@ -25,19 +27,34 @@ public sealed class SceneLoader : MonoBehaviour
         }
     }
 
-    public static void Load(string sceneReference, float delay = 0f)
+    public static void Load(string sceneReference, float delay = 0f, bool saveBeforeLoad = true)
     {
-        Instance.LoadScene(delay);
+        Instance.LoadScene(sceneReference, delay, saveBeforeLoad);
     }
 
-    public static void LoadMain(float delay = 0f)
+    public static void LoadMain(float delay = 0f, bool saveBeforeLoad = true)
     {
-        Instance.LoadScene(delay);
+        Instance.LoadScene(MainScenePath, delay, saveBeforeLoad);
     }
 
-    public static void ReloadCurrent(float delay = 0f)
+    public static void LoadMenu(float delay = 0f, bool saveBeforeLoad = true)
     {
-        Instance.LoadScene(delay);
+        Instance.LoadScene(MenuScenePath, delay, saveBeforeLoad);
+    }
+
+    public static void ReloadCurrent(float delay = 0f, bool saveBeforeLoad = true)
+    {
+        Scene activeScene = SceneManager.GetActiveScene();
+        string currentSceneReference = !string.IsNullOrWhiteSpace(activeScene.path)
+            ? activeScene.path
+            : activeScene.name;
+
+        if (string.IsNullOrWhiteSpace(currentSceneReference))
+        {
+            currentSceneReference = MainScenePath;
+        }
+
+        Instance.LoadScene(currentSceneReference, delay, saveBeforeLoad);
     }
 
     private void Awake()
@@ -52,27 +69,34 @@ public sealed class SceneLoader : MonoBehaviour
         DontDestroyOnLoad(gameObject);
     }
 
-    private void LoadScene(float delay)
+    private void LoadScene(string sceneReference, float delay, bool saveBeforeLoad)
     {
         StopAllCoroutines();
-        StartCoroutine(LoadSceneRoutine(delay));
+        StartCoroutine(LoadSceneRoutine(sceneReference, delay, saveBeforeLoad));
     }
 
-    private IEnumerator LoadSceneRoutine(float delay)
+    private IEnumerator LoadSceneRoutine(string sceneReference, float delay, bool saveBeforeLoad)
     {
         if (delay > 0f)
         {
             yield return new WaitForSecondsRealtime(delay);
         }
 
-        if (GameStateHub.Instance != null)
+        if (saveBeforeLoad)
         {
-            GameStateHub.Instance.Save();
+            if (GameStateHub.Instance != null)
+            {
+                GameStateHub.Instance.Save();
+            }
+            else
+            {
+                SaveSystem.SaveIfPossible();
+            }
         }
-        else
-        {
-            SaveSystem.SaveIfPossible();
-        }
-        SceneManager.LoadScene(MainScenePath);
+
+        string resolvedSceneReference = string.IsNullOrWhiteSpace(sceneReference)
+            ? MainScenePath
+            : sceneReference;
+        SceneManager.LoadScene(resolvedSceneReference);
     }
 }

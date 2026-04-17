@@ -90,75 +90,8 @@ public static class CorePrefabBuilder
 
     private static GameObject CreateInteractionPromptPrefabRoot()
     {
-        TMP_FontAsset font = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(DisplayFontAssetPath);
-        if (font == null)
-        {
-            font = TMP_Settings.defaultFontAsset;
-        }
-
         GameObject root = new GameObject("InteractionPrompt");
-        InteractionPromptUI interactionPrompt = root.AddComponent<InteractionPromptUI>();
-
-        GameObject canvasObject = new GameObject("Canvas");
-        canvasObject.transform.SetParent(root.transform, false);
-        Canvas canvas = canvasObject.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = 120;
-        canvas.pixelPerfect = false;
-        canvasObject.AddComponent<CanvasScaler>();
-        canvasObject.AddComponent<GraphicRaycaster>();
-
-        CanvasGroup canvasGroup = canvasObject.AddComponent<CanvasGroup>();
-        canvasGroup.alpha = 0f;
-        canvasGroup.blocksRaycasts = false;
-        canvasGroup.interactable = false;
-
-        RectTransform canvasRect = canvas.GetComponent<RectTransform>();
-        Stretch(canvasRect);
-
-        GameObject panelObject = new GameObject("PromptPanel");
-        panelObject.transform.SetParent(canvasObject.transform, false);
-        RectTransform panelRect = panelObject.AddComponent<RectTransform>();
-        panelRect.anchorMin = new Vector2(0.5f, 0f);
-        panelRect.anchorMax = new Vector2(0.5f, 0f);
-        panelRect.pivot = new Vector2(0.5f, 0f);
-        panelRect.anchoredPosition = new Vector2(0f, 48f);
-        panelRect.sizeDelta = new Vector2(420f, 94f);
-
-        Image panelImage = panelObject.AddComponent<Image>();
-        panelImage.color = new Color(0.08f, 0.09f, 0.11f, 0.92f);
-
-        TMP_Text keyLabel = CreateTextElement(panelObject.transform, "KeyLabel", font, 24, FontStyles.Bold, TextAlignmentOptions.Center);
-        RectTransform keyRect = keyLabel.rectTransform;
-        keyRect.anchorMin = new Vector2(0f, 0.5f);
-        keyRect.anchorMax = new Vector2(0f, 0.5f);
-        keyRect.pivot = new Vector2(0f, 0.5f);
-        keyRect.anchoredPosition = new Vector2(28f, 0f);
-        keyRect.sizeDelta = new Vector2(54f, 54f);
-        keyLabel.text = "E";
-        keyLabel.color = new Color(0.94f, 0.91f, 0.85f, 1f);
-
-        TMP_Text displayNameLabel = CreateTextElement(panelObject.transform, "DisplayNameLabel", font, 18, FontStyles.Bold, TextAlignmentOptions.Left);
-        RectTransform displayRect = displayNameLabel.rectTransform;
-        displayRect.anchorMin = new Vector2(0f, 1f);
-        displayRect.anchorMax = new Vector2(1f, 1f);
-        displayRect.pivot = new Vector2(0f, 1f);
-        displayRect.offsetMin = new Vector2(102f, -34f);
-        displayRect.offsetMax = new Vector2(-24f, -6f);
-        displayNameLabel.text = "可交互对象";
-        displayNameLabel.color = new Color(0.97f, 0.94f, 0.88f, 1f);
-
-        TMP_Text promptLabel = CreateTextElement(panelObject.transform, "PromptLabel", font, 16, FontStyles.Normal, TextAlignmentOptions.Left);
-        RectTransform promptRect = promptLabel.rectTransform;
-        promptRect.anchorMin = new Vector2(0f, 0f);
-        promptRect.anchorMax = new Vector2(1f, 1f);
-        promptRect.pivot = new Vector2(0f, 0f);
-        promptRect.offsetMin = new Vector2(102f, 10f);
-        promptRect.offsetMax = new Vector2(-24f, -38f);
-        promptLabel.text = "交互";
-        promptLabel.color = new Color(0.76f, 0.78f, 0.8f, 1f);
-
-        interactionPrompt.ConfigureLocalPrompt(canvas, canvasGroup, panelImage, displayNameLabel, promptLabel, keyLabel);
+        root.AddComponent<InteractionPromptUI>();
         return root;
     }
 

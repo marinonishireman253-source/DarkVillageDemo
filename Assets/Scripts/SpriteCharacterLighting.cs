@@ -35,6 +35,7 @@ public sealed class SpriteCharacterLighting : MonoBehaviour
 
     private MaterialPropertyBlock _propertyBlock;
     private CharacterGroundShadow _groundShadow;
+    private IGroundProjectionProvider _groundProjectionProvider;
 
     public void ApplyFrame(SpriteRenderer spriteRenderer, Transform visualRoot, float desiredHeight, float moveBlend, float attackBlend)
     {
@@ -117,7 +118,10 @@ public sealed class SpriteCharacterLighting : MonoBehaviour
         {
             Color shadowColor = zone != null ? zone.ShadowColor : new Color(0.05f, 0.05f, 0.06f, 1f);
             float shadowOpacity = zone != null ? zone.ShadowOpacity : 0.72f;
-            _groundShadow.ApplyFrame(transform.position, desiredHeight, moveBlend, attackBlend, shadowColor, shadowOpacity);
+            Vector3 shadowOrigin = _groundProjectionProvider != null
+                ? _groundProjectionProvider.GetGroundProjection(transform.position)
+                : transform.position;
+            _groundShadow.ApplyFrame(shadowOrigin, desiredHeight, moveBlend, attackBlend, shadowColor, shadowOpacity);
         }
     }
 
@@ -179,6 +183,21 @@ public sealed class SpriteCharacterLighting : MonoBehaviour
         if (_groundShadow == null)
         {
             _groundShadow = gameObject.AddComponent<CharacterGroundShadow>();
+        }
+
+        if (_groundProjectionProvider != null)
+        {
+            return;
+        }
+
+        MonoBehaviour[] behaviours = GetComponents<MonoBehaviour>();
+        for (int i = 0; i < behaviours.Length; i++)
+        {
+            if (behaviours[i] is IGroundProjectionProvider provider)
+            {
+                _groundProjectionProvider = provider;
+                break;
+            }
         }
     }
 
